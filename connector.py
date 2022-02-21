@@ -70,7 +70,19 @@ class Connector():
     def refresh_stats(self):
         self.exec_commit_no_result("ANALYZE")
 
-    # TODO: def get_db_info
+    # TODO: Consider removing restrictions on tables considered
+    def get_db_info(self) -> list[(str, list[str])]:
+        info = []
+        tables = self.exec_commit(
+            "SELECT relname FROM pg_class WHERE relkind='r' AND relname NOT LIKE 'pg_%' AND relname NOT LIKE 'sql_%';")
+        for table in tables:
+            table = table[0]
+            cols = self.exec_commit(
+                f"SELECT column_name FROM information_schema.columns WHERE table_name='{table}';")
+            for i in range(len(cols)):
+                cols[i] = cols[i][0]
+            info.append((table, cols))
+        return info
 
 
 if __name__ == "__main__":
@@ -85,3 +97,5 @@ if __name__ == "__main__":
     c = db.get_cost(q)
     print(c)
     db.drop_simulated_index(oid)
+    info = db.get_db_info()
+    print(info)
