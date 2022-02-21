@@ -4,9 +4,14 @@ from enum import Enum
 from typing import TypedDict
 
 import sqlparse
+import pandas
 
-# TODO: Get table schemas from Postgres
-# TODO: Handle update statements
+
+class QueryAttributes(TypedDict):
+    selects: list[str]
+    filters: list[str]
+    orders: list[str]
+    groups: list[str]
 
 
 class KeywordType(Enum):
@@ -18,14 +23,7 @@ class KeywordType(Enum):
     ORDER_BY = 5
 
 
-class QueryAttributes(TypedDict):
-    selects: list[str]
-    filters: list[str]
-    orders: list[str]
-    groups: list[str]
-
-
-class QueryParser():
+class QueryParser:
     def __init__(self):
         pass
 
@@ -93,7 +91,6 @@ class QueryParser():
             "groups": groups,
         }
 
-    # TODO: Use table schema info to prepend table to var placement in filters for multiple tables
     def parse_where_token(self, tables: list[str], clause: sqlparse.sql.Token, filters: list[str]):
         if isinstance(clause, sqlparse.sql.Comparison):
             for var in clause:
@@ -108,9 +105,45 @@ class QueryParser():
             for subclause in clause.tokens:
                 self.parse_where_token(subclause, filters)
 
+    # TODO: Use table schema info to prepend table to var placement for multiple tables
+    # def named_token()
+
+
+class WorkloadParser():
+    def __init__(self, wf: str):
+        self.parser = QueryParser()
+        self.input = wf
+
+    def _is_excluded(self, q: str):
+        excluded_keywords = ["AS", "SET", "BEGIN", "COMMIT"]
+        for keyword in excluded_keywords:
+            if keyword in q.split():
+                return True
+        return False
+
+    # TODO: Use a more limited preprocessing technique
+    def parse_queries(self) -> list[(str, QueryAttributes)]:
+        df = pandas.read_csv(self.input, usecols=[5, 13], header=None)
+        df.columns = ["session_id", "query"]
+        counts = df.groupby("session_id").aggregate('count')
+        max_count = counts.max()
+        thresh = 0.1 * max_count
+        df = df.groupby("session_id").filter(
+            lambda x: x["session_id"].count() > thresh)
+        df["query"] = df["query"].map(lambda x: x.split("statement: ")[1])
+        mask = df["query"].map(lambda x: not self._is_excluded(x))
+        df = df[mask == True]
+        queries = list(df["query"])
+        res = []
+        for query in queries:
+            res.append((query, self.parser.parse(query)))
+        return res
+
 
 if __name__ == "__main__":
     qp = QueryParser()
     res = qp.parse(
         '''SELECT * FROM review r, item i WHERE i.i_id = r.i_id and r.i_id=112 ORDER BY rating DESC, r.creation_date DESC LIMIT 10''')
     print(res)
+    wp = WorkloadParser("test_input.csv")
+    print(wp.parse_queries())

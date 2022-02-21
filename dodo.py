@@ -9,4 +9,19 @@ def task_project1():
         ],
         # Always rerun this task.
         "uptodate": [False],
+        "verbosity": 2,
+        "params": [
+            {
+                "name": "workload_csv",
+                "long": "workload_csv",
+                "help": "The PostgreSQL workload to optimize for.",
+                "default": None,
+            },
+            {
+                "name": "timeout",
+                "long": "timeout",
+                "help": "The time allowed for execution before this dodo task will be killed.",
+                "default": None,
+            },
+        ],
     }
