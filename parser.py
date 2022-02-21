@@ -73,7 +73,7 @@ class QueryParser:
             if isinstance(token, sqlparse.sql.Where):
                 seen = KeywordType.NONE
                 for where_token in token:
-                    self.parse_where_token(tables, where_token, filters)
+                    self._parse_where_token(tables, where_token, filters)
             if token.ttype is sqlparse.sql.T.Keyword and token.value.upper() == "GROUP BY":
                 seen = KeywordType.GROUP_BY
             if token.ttype is sqlparse.sql.T.Keyword and token.value.upper() == "ORDER BY":
@@ -91,7 +91,7 @@ class QueryParser:
             "groups": groups,
         }
 
-    def parse_where_token(self, tables: list[str], clause: sqlparse.sql.Token, filters: list[str]):
+    def _parse_where_token(self, tables: list[str], clause: sqlparse.sql.Token, filters: list[str]):
         if isinstance(clause, sqlparse.sql.Comparison):
             for var in clause:
                 if isinstance(var, sqlparse.sql.Identifier):
@@ -103,9 +103,9 @@ class QueryParser:
                         filters.append(tables[0] + '.' + strvar)
         elif isinstance(clause, sqlparse.sql.Parenthesis):
             for subclause in clause.tokens:
-                self.parse_where_token(subclause, filters)
+                self._parse_where_token(subclause, filters)
 
-    # TODO: Use table schema info to prepend table to var placement for multiple tables
+    # TODO: Use table schema to prepend correct table to var in case multiple tables have column
     # def named_token()
 
 
