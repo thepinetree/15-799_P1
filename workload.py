@@ -15,12 +15,14 @@ class Workload:
         self.tables = dict()
         # Connector to database
         self.db = connector.Connector()
-        # Best estimated workload cost
-        self.cost = None
         # Min cost improvement factor
         self.min_improvement = constants.MIN_COST_FACTOR
+        # Best estimated workload cost
+        self.cost = None
+        # Best index under consideration
+        self.next_ind = None
         # Suggested indexes to add
-        self.suggested_inds = []
+        self.config = []
         # Change in cost
         self.delta = None
 
@@ -51,33 +53,43 @@ class Workload:
 
     def select(self):
         while True:
-            self.delta = 0
             # Single index selection phase
+            # TODO: remove assumption of single column index
             for ident in self.potential_cols:
                 table, col = ident.split('.')
-                self.evaluate_index(schema.Index(table, [col]))
-            # Stop when there is no benefit to the workload
-            if self.delta >= 0:
+                self._evaluate_index(schema.Index(table, [col]))
+            if self.next_ind is not None:
+                self.config.append(self.next_ind)
+                self.cost += self.delta
+                # TODO: write index to output file
+                logging.debug(
+                    "Selecting index {}. New workload cost estimate: {}.", self.next_ind, self.cost)
+                # TODO: remove assumption of single column index
+                self.potential_cols.remove(self.next_ind.cols()[0])
+                self.next_ind = None
+                self.delta = 0
+            else:  # Stop when there is no benefit to the workload
                 logging.debug(
                     "Terminating selection procedure. Suggested indexes {}.", self.suggested_inds)
                 break
 
-    def evaluate_index(self, ind: schema.Index):
+    def _evaluate_index(self, ind: schema.Index):
         ind_oid = self.db.simulate_index(
             ind.name(), ind.table_str(), ind.cols_str())
+        ind.set_oid(ind_oid)
         delta = 0
-        for col in ind.cols():
+        for col in ind.get_cols():
             for qid in col.get_queries():
                 new_cost = self.db.get_cost(self.queries[qid].get_str())
                 delta += (new_cost - self.cost)
-        if delta < 0 and abs(delta) >= abs(self.min_cost_factor * self.cost):
+        # NOTE: self.delta is upper bounded by 0
+        if delta < self.delta and abs(delta) >= abs(self.min_cost_factor * self.cost):
             assert(abs(delta) < abs(self.cost))
-            self.cost += delta
-            self.suggested_inds.append(ind)
-            # TODO: remove assumption of single column index
-            self.suggested_inds.remove(ind.cols()[0])
-            # TODO: write index to output file
+            if self.next_ind is not None:
+                self.db.drop_simulated_index(self.next_ind.get_hyp_oid())
+            self.next_ind = ind
+            self.delta = delta
             logging.debug(
-                "Adding index {}. New workload cost estimate: {}.", self.cost)
+                "Index {} shows improvement. New workload cost estimate: {}.", ind, self.cost + self.delta)
         else:
             self.db.drop_simulated_index(ind_oid)

@@ -94,8 +94,11 @@ class Index:
     def cols_str(self) -> str:
         return f"{','.join(self.cols)}"
 
-    def cols(self) -> list[Column]:
+    def get_cols(self) -> list[Column]:
         return self.cols
+
+    def get_hyp_oid(self) -> int:
+        return self.hyp_oid
 
     def set_oid(self, oid: int):
         self.oid = oid
