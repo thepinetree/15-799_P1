@@ -24,9 +24,6 @@ class Query:
     def get_id(self) -> int:
         return self.id
 
-    def cost(self, db: connector.Connector) -> float:
-        return db.get_cost(self.query)
-
     def get_cost(self) -> float:
         return self.best_cost
 
@@ -64,6 +61,7 @@ class Table:
     def __init__(self, name: str, cols: list[str]):
         self.name = name
         self.cols = set()
+        self.indexable_cols = set()
         for col in cols:
             self.cols.add(Column(col))
 
@@ -72,6 +70,9 @@ class Table:
 
     def cols(self) -> set(str):
         return self.cols
+
+    def add_indexable_col(self, col: str):
+        self.indexable_cols.add(Column(col))
 
 
 class Index:
@@ -84,11 +85,17 @@ class Index:
         self.cols = cols
         self.hyp_oid = None
 
-    def name(self):
+    def name(self) -> str:
         return f"_tune_{self.id}"
 
-    def cols_str(self):
+    def table_str(self) -> str:
+        return str(self.table)
+
+    def cols_str(self) -> str:
         return f"{','.join(self.cols)}"
 
-    def table_str(self):
-        return str(self.table)
+    def cols(self) -> list[Column]:
+        return self.cols
+
+    def set_oid(self, oid: int):
+        self.oid = oid

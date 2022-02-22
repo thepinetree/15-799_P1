@@ -1,11 +1,17 @@
+import workload
+
+
 def task_project1():
+    def run_alg(workload_csv, _timeout):
+        w = workload.Workload()
+        w.setup(workload_csv)
+        w.select()
+
     return {
         # A list of actions. This can be bash or Python callables.
         "actions": [
-            'echo "Faking action generation."',
-            'echo "SELECT 1;" > actions.sql',
-            'echo "SELECT 2;" >> actions.sql',
-            'echo \'{"VACUUM": true}\' > config.json',
+            'echo "Starting action generation."',
+            run_alg,
         ],
         # Always rerun this task.
         "uptodate": [False],
