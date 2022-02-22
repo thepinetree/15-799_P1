@@ -50,7 +50,6 @@ class Connector():
         logging.debug("Disconnected from {} as {}",
                       constants.DB_NAME, constants.DB_USER)
 
-    # TODO: re-type this function once an index class exists
     def simulate_index(self, index_name: str, table_name: str, index_attrs: str) -> int:
         hypopg_stmt = f"SELECT * FROM hypopg_create_index(CREATE INDEX {index_name} ON {table_name} ({index_attrs}))"
         result = self.exec_commit(hypopg_stmt)
