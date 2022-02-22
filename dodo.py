@@ -25,3 +25,15 @@ def task_project1():
             },
         ],
     }
+
+
+def project1_setup():
+    return {
+        "actions": [
+            'pip install psycopg',
+            'pip install pandas',
+            'pip install sqlparse',
+        ],
+        # Always rerun this task.
+        "uptodate": [False],
+    }
