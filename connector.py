@@ -10,8 +10,8 @@ class Connector():
                                            user=constants.DB_USER,
                                            password=constants.DB_PASS)
         self._connection.autocommit = constants.AUTOCOMMIT
-        logging.debug("Connected to {} as {}",
-                      constants.DB_NAME, constants.DB_USER)
+        logging.debug(
+            f"Connected to {constants.DB_NAME} as {constants.DB_USER}")
         _ = self.exec_commit_no_result(
             "CREATE EXTENSION IF NOT EXISTS hypopg;")
         logging.debug("Enabled HypoPG")
@@ -48,8 +48,8 @@ class Connector():
 
     def close(self):
         self._connection.close()
-        logging.debug("Disconnected from {} as {}",
-                      constants.DB_NAME, constants.DB_USER)
+        logging.debug(
+            f"Disconnected from {constants.DB_NAME} as {constants.DB_USER}")
 
     def simulate_index(self, index_name: str, table_name: str, index_attrs: str) -> int:
         hypopg_stmt = f"SELECT * FROM hypopg_create_index('CREATE INDEX {index_name} ON {table_name} ({index_attrs})');"

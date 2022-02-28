@@ -1,12 +1,16 @@
 import workload
+import logging
+
+
+def run_alg(workload_csv, _timeout):
+    logging.basicConfig()
+    logging.getLogger().setLevel(logging.DEBUG)
+    w = workload.Workload()
+    w.setup(workload_csv)
+    w.select()
 
 
 def task_project1():
-    def run_alg(workload_csv, _timeout):
-        w = workload.Workload()
-        w.setup(workload_csv)
-        w.select()
-
     return {
         # A list of actions. This can be bash or Python callables.
         "actions": [
@@ -43,3 +47,7 @@ def project1_setup():
         # Always rerun this task.
         "uptodate": [False],
     }
+
+
+if __name__ == "__main__":
+    run_alg("./input/starter.csv", 0)

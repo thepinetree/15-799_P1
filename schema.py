@@ -1,6 +1,4 @@
-from operator import index
 import parser
-import connector
 
 query_id = 0
 index_id = 0
@@ -8,6 +6,7 @@ index_id = 0
 
 class Query:
     def __init__(self, query: str, attrs: parser.QueryAttributes):
+        global query_id
         # Unique ID. queryIDs are the internal, canonical representation of queries.
         self.id = query_id
         query_id += 1
@@ -34,56 +33,67 @@ class Query:
         return self.query
 
     # TODO: Consider other structures for output with more information
-    def get_indexable_cols(self) -> set(str):
+    def get_indexable_cols(self) -> list[str]:
         cols = set()
         for col_ident in self.attrs["filters"]:
             cols.add(col_ident)
+        return list(cols)
 
 
 class Column:
-    def __init__(self, name: str):
+    def __init__(self, table: str, name: str):
         # Name of column
         self.name = name
+        # Name of table
+        self.table = table
         # Queries with column appearing as indexable predicate
         self.queries = set()
 
     def __str__(self):
         return self.name
 
+    def get_name(self) -> str:
+        return self.name
+
+    def get_table(self) -> str:
+        return self.table
+
     def add_query(self, qid: int):
         self.queries.add(qid)
 
-    def get_queries(self) -> set(int):
-        return self.queries
+    def get_queries(self) -> list[int]:
+        return list(self.queries)
 
 
 class Table:
     def __init__(self, name: str, cols: list[str]):
         self.name = name
-        self.cols = set()
-        self.indexable_cols = set()
+        self.cols = dict()
         for col in cols:
-            self.cols.add(Column(col))
+            self.cols[col] = Column(self.name, col)
 
     def __str__(self):
         return self.name
 
-    def cols(self) -> set(str):
+    def get_cols(self) -> dict[str, Column]:
         return self.cols
-
-    def add_indexable_col(self, col: str):
-        self.indexable_cols.add(Column(col))
 
 
 class Index:
-    def __init__(self, table: Table, cols: list[Column]):
+    def __init__(self, cols: list[Column]):
+        global index_id
         assert(len(cols) > 0)
+        assert(False not in [col.get_table() ==
+               cols[0].get_table() for col in cols])
         # Unique ID. queryIDs are the internal, canonical representation of queries.
         self.id = index_id
         index_id += 1
-        self.table = table
+        self.table = cols[0].get_table()
         self.cols = cols
         self.hyp_oid = None
+
+    def __str__(self) -> str:
+        return f"{self.name()} {self.table_str()}({self.cols_str()})"
 
     def name(self) -> str:
         return f"_tune_{self.id}"
@@ -92,7 +102,7 @@ class Index:
         return str(self.table)
 
     def cols_str(self) -> str:
-        return f"{','.join(self.cols)}"
+        return f"{','.join([col.get_name() for col in self.cols])}"
 
     def get_cols(self) -> list[Column]:
         return self.cols
@@ -100,5 +110,5 @@ class Index:
     def get_hyp_oid(self) -> int:
         return self.hyp_oid
 
-    def set_oid(self, oid: int):
-        self.oid = oid
+    def set_hyp_oid(self, oid: int):
+        self.hyp_oid = oid
