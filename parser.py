@@ -1,6 +1,7 @@
 # inspired by https://stackoverflow.com/questions/58669863/is-there-any-function-to-parse-a-complete-sql-query-in-python
 
 from enum import Enum
+from pprint import pprint
 from typing import TypedDict
 
 import sqlparse
@@ -36,7 +37,7 @@ class QueryParser:
             assert(False)
         parsed_sql = sqlparse.parse(query)
         stmt = parsed_sql[0]
-        tables = []
+        tables = dict()
         selects = []
         filters = []
         orders = []
@@ -55,9 +56,9 @@ class QueryParser:
             if seen == KeywordType.FROM:
                 if isinstance(token, sqlparse.sql.IdentifierList):
                     for identifier in token.get_identifiers():
-                        tables.append(str(token))
+                        self._parse_table_token(tables, identifier)
                 elif isinstance(token, sqlparse.sql.Identifier):
-                    tables.append(str(token))
+                    self._parse_table_token(tables, token)
             if seen == KeywordType.ORDER_BY:
                 if isinstance(token, sqlparse.sql.IdentifierList):
                     for identifier in token.get_identifiers():
@@ -91,22 +92,32 @@ class QueryParser:
             "groups": groups,
         }
 
-    def _parse_where_token(self, tables: list[str], clause: sqlparse.sql.Token, filters: list[str]):
+    def _parse_table_token(self, tables: dict[str, str], table: sqlparse.sql.Token):
+        tokens = str(table).split()
+        if len(tokens) == 1:
+            tables[tokens[0]] = tokens[0]
+        assert(len(tokens) == 2)
+        tables[tokens[1]] = tokens[0]
+
+    def _parse_where_token(self, tables: dict[str, str], clause: sqlparse.sql.Token, filters: list[str]):
         if isinstance(clause, sqlparse.sql.Comparison):
             for var in clause:
                 if isinstance(var, sqlparse.sql.Identifier):
                     strvar = str(var)
                     if '.' in strvar:
-                        filters.append(strvar)
+                        tokens = strvar.split('.')
+                        assert(len(tokens) == 2)
+                        table = tables[tokens[0]]
+                        filters.append('.'.join([table, tokens[1]]))
                     else:
                         assert(len(tables) == 1)
-                        filters.append(tables[0] + '.' + strvar)
+                        filters.append('.'.join([tables.values([0]), strvar]))
         elif isinstance(clause, sqlparse.sql.Parenthesis):
             for subclause in clause.tokens:
                 self._parse_where_token(subclause, filters)
 
     # TODO: Use table schema to prepend correct table to var in case multiple tables have column
-    # def named_token()
+    # def _qualify_column()
 
 
 class WorkloadParser():
@@ -114,7 +125,7 @@ class WorkloadParser():
         self.parser = QueryParser()
         self.input = wf
 
-    def _is_excluded(self, q: str):
+    def _is_excluded(self, q: str) -> bool:
         excluded_keywords = ["AS", "SET", "BEGIN", "COMMIT"]
         for keyword in excluded_keywords:
             if keyword in q.split():
@@ -143,7 +154,7 @@ class WorkloadParser():
 if __name__ == "__main__":
     qp = QueryParser()
     res = qp.parse(
-        '''SELECT * FROM review r, item i WHERE i.i_id = r.i_id and r.i_id=112 ORDER BY rating DESC, r.creation_date DESC LIMIT 10''')
+        '''SELECT * FROM review r, item i WHERE i.i_id = r.i_id and r.i_id=112 ORDER BY rating DESC, r.creation_date DESC LIMIT 10;''')
     print(res)
     wp = WorkloadParser("test_input.csv")
-    print(wp.parse_queries())
+    pprint(wp.parse_queries())

@@ -12,7 +12,8 @@ class Connector():
         self._connection.autocommit = constants.AUTOCOMMIT
         logging.debug("Connected to {} as {}",
                       constants.DB_NAME, constants.DB_USER)
-        _ = self.exec_commit_no_result("CREATE EXTENSION hypopg")
+        _ = self.exec_commit_no_result(
+            "CREATE EXTENSION IF NOT EXISTS hypopg;")
         logging.debug("Enabled HypoPG")
         self.refresh_stats()
 
@@ -51,23 +52,23 @@ class Connector():
                       constants.DB_NAME, constants.DB_USER)
 
     def simulate_index(self, index_name: str, table_name: str, index_attrs: str) -> int:
-        hypopg_stmt = f"SELECT * FROM hypopg_create_index(CREATE INDEX {index_name} ON {table_name} ({index_attrs}))"
+        hypopg_stmt = f"SELECT * FROM hypopg_create_index('CREATE INDEX {index_name} ON {table_name} ({index_attrs})');"
         result = self.exec_commit(hypopg_stmt)
-        return result[0]
+        return result[0][0]
 
     def drop_simulated_index(self, oid: int):
-        hypopg_stmt = f"SELECT * FROM hypopg_drop_index({oid})"
+        hypopg_stmt = f"SELECT * FROM hypopg_drop_index({oid});"
         result = self.exec_commit(hypopg_stmt)
-        assert(result[0] == True)
+        assert(result[0][0] == True)
 
     def get_cost(self, query: str) -> float:
-        stmt = f"EXPLAIN (format json) {query}"
+        stmt = f"EXPLAIN (format json) {query};"
         plan = self.exec_commit(stmt)[0][0][0]["Plan"]
         cost = plan["Total Cost"]
         return cost
 
     def refresh_stats(self):
-        self.exec_commit_no_result("ANALYZE")
+        self.exec_commit_no_result("ANALYZE;")
 
     # TODO: Consider removing restrictions on tables considered
     def get_db_info(self) -> list[(str, list[str])]:
@@ -86,15 +87,14 @@ class Connector():
 
 if __name__ == "__main__":
     db = Connector()
-    q = "SELECT * FROM review r, item i WHERE i.i_id = r.i_id and r.i_id=112 ORDER BY rating DESC, r.creation_date DESC LIMIT 10"
+    q = "SELECT * FROM review r, item i WHERE i.i_id = r.i_id and r.i_id=112 ORDER BY rating DESC, r.creation_date DESC LIMIT 10;"
     res = db.exec_commit(q)
-    print(res)
-    c = db.get_cost(q)
-    print(c)
-    oid = db.simulate_index("1(r.i_id)")
-    print(oid)
-    c = db.get_cost(q)
-    print(c)
+    print(f"Execution result: {res}")
+    c0 = db.get_cost(q)
+    oid = db.simulate_index("pg_1", "review", "i_id")
+    print(f"Hypopg index oid: {oid}")
+    c1 = db.get_cost(q)
+    print(f"Cost reduced from {c0} to {c1}")
     db.drop_simulated_index(oid)
     info = db.get_db_info()
     print(info)
