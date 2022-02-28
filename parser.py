@@ -156,5 +156,5 @@ if __name__ == "__main__":
     res = qp.parse(
         '''SELECT * FROM review r, item i WHERE i.i_id = r.i_id and r.i_id=112 ORDER BY rating DESC, r.creation_date DESC LIMIT 10;''')
     print(res)
-    wp = WorkloadParser("test_input.csv")
+    wp = WorkloadParser("./input/test_input.csv")
     pprint(wp.parse_queries())

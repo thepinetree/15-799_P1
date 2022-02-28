@@ -26,6 +26,9 @@ class Workload:
         self.config = []
         # Change in cost
         self.delta = 0
+        # Output path for selected actions
+        f = open(constants.OUTPUT_PATH, 'a')
+        self.out = f
 
     def workload_cost(self) -> float:
         cost = 0
@@ -62,9 +65,10 @@ class Workload:
             if self.next_ind is not None:
                 self.config.append(self.next_ind)
                 self._update_costs(self.next_ind)
-                # TODO: write index to output file
+                self.out.write(self.next_ind.create_stmt() + ";\n")
+                self.out.flush()
                 logging.debug(
-                    f"Selecting index {self.next_ind}. New workload cost estimate: {self.cost}.")
+                    f"Applying '{self.next_ind}'. New workload cost estimate: {self.cost}.")
                 # TODO: remove assumption of single column index
                 self.potential_cols.remove(self.next_ind.get_cols()[0])
                 self.next_ind = None
@@ -88,8 +92,7 @@ class Workload:
         self.cost += delta
 
     def _evaluate_index(self, ind: schema.Index):
-        ind_oid = self.db.simulate_index(
-            ind.name(), ind.table_str(), ind.cols_str())
+        ind_oid = self.db.simulate_index(ind.create_stmt())
         ind.set_hyp_oid(ind_oid)
         delta = 0
         evaluated = set()

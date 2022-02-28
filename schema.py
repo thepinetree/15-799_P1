@@ -93,15 +93,15 @@ class Index:
         self.hyp_oid = None
 
     def __str__(self) -> str:
-        return f"{self.name()} {self.table_str()}({self.cols_str()})"
+        return self.create_stmt()
 
-    def name(self) -> str:
+    def _name(self) -> str:
         return f"_tune_{self.id}"
 
-    def table_str(self) -> str:
+    def _table_str(self) -> str:
         return str(self.table)
 
-    def cols_str(self) -> str:
+    def _cols_str(self) -> str:
         return f"{','.join([col.get_name() for col in self.cols])}"
 
     def get_cols(self) -> list[Column]:
@@ -112,3 +112,6 @@ class Index:
 
     def set_hyp_oid(self, oid: int):
         self.hyp_oid = oid
+
+    def create_stmt(self) -> str:
+        return f"CREATE INDEX {self._name()} ON {self._table_str()} ({self._cols_str()})"
