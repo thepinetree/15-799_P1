@@ -90,8 +90,9 @@ class Index:
         index_id += 1
         self.table = cols[0].get_table()
         self.cols = cols
-        self.hyp_oid = None
-        self.hyp_size = 0
+        self.oid = None
+        self.size = 0
+        self.num_uses = 0
 
     def __str__(self) -> str:
         return self.create_stmt()
@@ -108,14 +109,23 @@ class Index:
     def get_cols(self) -> list[Column]:
         return self.cols
 
-    def get_hyp_oid(self) -> int:
-        return self.hyp_oid
+    def get_oid(self) -> int:
+        return self.oid
 
-    def set_hyp_oid(self, oid: int):
-        self.hyp_oid = oid
+    def set_oid(self, oid: int):
+        self.oid = oid
 
-    def set_hyp_size(self, size: int):
-        self.hyp_size = size
+    def set_size(self, size: int):
+        self.size = size
+
+    def get_size(self) -> int:
+        return self.size
+
+    def set_num_uses(self, num_uses: int) -> int:
+        self.num_uses = num_uses
+
+    def get_num_uses(self) -> int:
+        return self.num_uses
 
     def create_stmt(self) -> str:
         return f"CREATE INDEX {self._name()} ON {self._table_str()} ({self._cols_str()})"

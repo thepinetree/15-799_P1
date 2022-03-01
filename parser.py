@@ -141,7 +141,7 @@ class WorkloadParser():
     def parse_queries(self) -> list[(str, QueryAttributes)]:
         df = pandas.read_csv(self.input, usecols=[5, 13], header=None)
         df.columns = ["session_id", "query"]
-        counts = df.groupby("session_id").aggregate('count')
+        counts = df.groupby("session_id").aggregate("count")
         max_count = counts.max()
         thresh = 0.1 * max_count
         df = df.groupby("session_id").filter(
