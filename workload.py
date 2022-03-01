@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import connector
 import constants
 import logging
@@ -14,8 +15,8 @@ class Workload:
         self.potential_cols = set()
         # Map from table name -> table info
         self.tables = dict()
-        # Map from index name -> index info
-        self.indexes = dict()
+        # Map from index name -> index info ordered by uses/size
+        self.indexes = OrderedDict()
         # Connector to database
         self.db = connector.Connector()
         # Min cost improvement factor
@@ -25,6 +26,7 @@ class Workload:
         # Best index under consideration
         self.next_ind = None
         # Suggested indexes to add
+        # TODO: consider change to dictionary
         self.config = []
         # Change in cost/size
         self.improvement = 0
@@ -48,10 +50,15 @@ class Workload:
         tables = self.db.get_table_info()
         for table, cols in tables:
             self.tables[table] = schema.Table(table, cols)
-        # TODO: Add existing index info to workload
+        ind_dict = dict()
         indexes = self.db.get_index_info()
-        # for index, table, cols, num_scans, size in indexes:
-        # self.indexes[index] = schema.Index()
+        for index, table, colnames, num_uses, size in indexes:
+            cols = [self.tables[table].get_cols()[col] for col in colnames]
+            ind_dict[index] = schema.Index(cols)
+            ind_dict[index].set_num_uses(num_uses)
+            ind_dict[index].set_size(size)
+            self.indexes = OrderedDict(
+                sorted(ind_dict.items(), key=lambda x: x[1].get_num_uses()/x[1].get_size()))
         for query, attrs in parsed:
             q = schema.Query(query, attrs)
             qid = q.get_id()
@@ -106,9 +113,6 @@ class Workload:
         ind.set_oid(ind_oid)
         ind_size = self.db.size_simulated_index(ind_oid)
         ind.set_size(ind_size)
-        if ind_size > self.max_storage:
-            self.db.drop_simulated_index(ind_oid)
-            return
         num_uses = 0
         delta = 0
         evaluated = set()
@@ -121,8 +125,32 @@ class Workload:
                     delta += (new_cost - old_cost)
                     evaluated.add(qid)
         ind.set_num_uses(num_uses)
-        improvement = delta/ind_size
+        # We are over storage capacity
+        drop_inds = []
+        it = iter(self.indexes)
+        max_storage = self.max_storage
+        while ind_size > max_storage:
+            if len(self.indexes) != 0:
+                worst_index = next(it)
+                w_num_uses = self.indexes[worst_index].get_num_uses()
+                w_size = self.indexes[worst_index].get_size()
+                # In the absense of cost information of existing indexes, we can choose to drop indexes by a proxy of
+                # uses/size assuming the uses are approximately similar in cost
+                # TODO: find a better metric of index cost
+                if num_uses/ind_size > w_num_uses/w_size:
+                    drop_inds.append(worst_index)
+                    max_storage -= w_size
+                    continue
+            self.db.drop_simulated_index(ind_oid)
+            return
+        for drop_ind in drop_inds:
+            drop_ind = self.indexes[drop_ind]
+            self.out.write(self.next_ind.drop_stmt() + ";\n")
+            self.out.flush()
+            self.max_storage -= drop_ind.get_size()
+            del self.indexes[drop_ind]
         # NOTE: self.improvement is upper bounded by 0
+        improvement = delta/ind_size
         if improvement < self.improvement and abs(delta) >= abs(self.min_cost_factor * self.cost):
             assert(delta < 0)
             assert(-delta < self.cost)

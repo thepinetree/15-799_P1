@@ -129,3 +129,6 @@ class Index:
 
     def create_stmt(self) -> str:
         return f"CREATE INDEX {self._name()} ON {self._table_str()} ({self._cols_str()})"
+
+    def drop_stmt(self) -> str:
+        return f"DROP INDEX {self._name()}"

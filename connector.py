@@ -89,6 +89,7 @@ class Connector():
             info.append((table, cols))
         return info
 
+    # TODO: Consider removing restrictions on indexes considered
     def get_index_info(self) -> list[(str, str, list[str], int, int)]:
         info = []
         indexes = self.exec_commit(
