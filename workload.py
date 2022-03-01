@@ -2,6 +2,7 @@ import connector
 import constants
 import logging
 import parser
+import psutil
 import schema
 
 
@@ -16,18 +17,20 @@ class Workload:
         # Connector to database
         self.db = connector.Connector()
         # Min cost improvement factor
-        self.min_improvement = constants.MIN_COST_FACTOR
+        self.min_cost_factor = constants.MIN_COST_FACTOR
         # Best estimated workload cost
         self.cost = None
         # Best index under consideration
         self.next_ind = None
         # Suggested indexes to add
         self.config = []
-        # Change in cost
-        self.delta = 0
+        # Change in cost/size
+        self.improvement = 0
         # Output path for selected actions
         f = open(constants.OUTPUT_PATH, 'a')
         self.out = f
+        # RAM space
+        self.max_storage = psutil.virtual_memory().available
 
     def workload_cost(self) -> float:
         cost = 0
@@ -71,7 +74,7 @@ class Workload:
                 # TODO: remove assumption of single column index
                 self.potential_cols.remove(self.next_ind.get_cols()[0])
                 self.next_ind = None
-                self.delta = 0
+                self.improvement = 0
             else:  # Stop when there is no benefit to the workload
                 logging.debug(
                     f"Terminating selection procedure. Suggested indexes {self.config}.")
@@ -89,10 +92,17 @@ class Workload:
                     self.queries[qid].set_cost(new_cost)
                     evaluated.add(qid)
         self.cost += delta
+        ind_size = self.db.size_simulated_index(ind.get_hyp_oid())
+        self.max_storage -= ind_size
 
     def _evaluate_index(self, ind: schema.Index):
         ind_oid = self.db.simulate_index(ind.create_stmt())
         ind.set_hyp_oid(ind_oid)
+        ind_size = self.db.size_simulated_index(ind_oid)
+        ind.set_hyp_size(ind_size)
+        if ind_size > self.max_storage:
+            self.db.drop_simulated_index(ind_oid)
+            return
         delta = 0
         evaluated = set()
         for col in ind.get_cols():
@@ -102,15 +112,16 @@ class Workload:
                     new_cost = self.db.get_cost(self.queries[qid].get_str())
                     delta += (new_cost - old_cost)
                     evaluated.add(qid)
-        # NOTE: self.delta is upper bounded by 0
-        if delta < self.delta and abs(delta) >= abs(self.min_improvement * self.cost):
+        improvement = delta/ind_size
+        # NOTE: self.improvement is upper bounded by 0
+        if improvement < self.improvement and abs(delta) >= abs(self.min_cost_factor * self.cost):
             assert(delta < 0)
             assert(-delta < self.cost)
             if self.next_ind is not None:
                 self.db.drop_simulated_index(self.next_ind.get_hyp_oid())
             self.next_ind = ind
-            self.delta = delta
+            self.improvement = improvement
             logging.debug(
-                f"Index {ind} shows improvement. Cost savings: {self.delta}. New workload cost estimate: {self.cost + self.delta}.")
+                f"Index {ind} shows improvement factor {self.improvement}. Cost savings: {delta}. New workload cost estimate: {self.cost + delta}.")
         else:
             self.db.drop_simulated_index(ind_oid)

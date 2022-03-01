@@ -61,6 +61,11 @@ class Connector():
         result = self.exec_commit(hypopg_stmt)
         assert(result[0][0] == True)
 
+    def size_simulated_index(self, oid: int) -> int:
+        hypopg_stmt = f"SELECT hypopg_relation_size({oid}) FROM hypopg_list_indexes;"
+        result = self.exec_commit(hypopg_stmt)
+        return result[0][0]
+
     def get_cost(self, query: str) -> float:
         stmt = f"EXPLAIN (format json) {query};"
         plan = self.exec_commit(stmt)[0][0][0]["Plan"]

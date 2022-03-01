@@ -91,6 +91,7 @@ class Index:
         self.table = cols[0].get_table()
         self.cols = cols
         self.hyp_oid = None
+        self.hyp_size = 0
 
     def __str__(self) -> str:
         return self.create_stmt()
@@ -112,6 +113,9 @@ class Index:
 
     def set_hyp_oid(self, oid: int):
         self.hyp_oid = oid
+
+    def set_hyp_size(self, size: int):
+        self.hyp_size = size
 
     def create_stmt(self) -> str:
         return f"CREATE INDEX {self._name()} ON {self._table_str()} ({self._cols_str()})"
