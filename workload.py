@@ -1,4 +1,3 @@
-from pprint import pprint
 import connector
 import constants
 import logging

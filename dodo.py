@@ -2,7 +2,7 @@ import workload
 import logging
 
 
-def run_alg(workload_csv, _timeout):
+def run_alg(workload_csv, timeout):
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
     w = workload.Workload()
