@@ -14,6 +14,8 @@ class Workload:
         self.potential_cols = set()
         # Map from table name -> table info
         self.tables = dict()
+        # Map from index name -> index info
+        self.indexes = dict()
         # Connector to database
         self.db = connector.Connector()
         # Min cost improvement factor
@@ -43,9 +45,13 @@ class Workload:
     def setup(self, wf: str):
         wp = parser.WorkloadParser(wf)
         parsed = wp.parse_queries()
-        info = self.db.get_db_info()
-        for table, cols in info:
+        tables = self.db.get_table_info()
+        for table, cols in tables:
             self.tables[table] = schema.Table(table, cols)
+        # TODO: Add existing index info to workload
+        indexes = self.db.get_index_info()
+        # for index, table, cols, num_scans, size in indexes:
+        # self.indexes[index] = schema.Index()
         for query, attrs in parsed:
             q = schema.Query(query, attrs)
             qid = q.get_id()
@@ -92,33 +98,36 @@ class Workload:
                     self.queries[qid].set_cost(new_cost)
                     evaluated.add(qid)
         self.cost += delta
-        ind_size = self.db.size_simulated_index(ind.get_hyp_oid())
+        ind_size = self.db.size_simulated_index(ind.get_oid())
         self.max_storage -= ind_size
 
     def _evaluate_index(self, ind: schema.Index):
         ind_oid = self.db.simulate_index(ind.create_stmt())
-        ind.set_hyp_oid(ind_oid)
+        ind.set_oid(ind_oid)
         ind_size = self.db.size_simulated_index(ind_oid)
-        ind.set_hyp_size(ind_size)
+        ind.set_size(ind_size)
         if ind_size > self.max_storage:
             self.db.drop_simulated_index(ind_oid)
             return
+        num_uses = 0
         delta = 0
         evaluated = set()
         for col in ind.get_cols():
             for qid in col.get_queries():
+                num_uses += 1
                 if qid not in evaluated:
                     old_cost = self.queries[qid].get_cost()
                     new_cost = self.db.get_cost(self.queries[qid].get_str())
                     delta += (new_cost - old_cost)
                     evaluated.add(qid)
+        ind.set_num_uses(num_uses)
         improvement = delta/ind_size
         # NOTE: self.improvement is upper bounded by 0
         if improvement < self.improvement and abs(delta) >= abs(self.min_cost_factor * self.cost):
             assert(delta < 0)
             assert(-delta < self.cost)
             if self.next_ind is not None:
-                self.db.drop_simulated_index(self.next_ind.get_hyp_oid())
+                self.db.drop_simulated_index(self.next_ind.get_oid())
             self.next_ind = ind
             self.improvement = improvement
             logging.debug(
