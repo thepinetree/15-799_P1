@@ -125,6 +125,9 @@ class WorkloadParser():
         self.parser = QueryParser()
         self.input = wf
 
+    def _is_stmt(self, q: str) -> bool:
+        return "statement:" in q
+
     def _is_excluded(self, q: str) -> bool:
         excluded_keywords = ["AS", "SET", "BEGIN", "COMMIT"]
         for keyword in excluded_keywords:
@@ -141,6 +144,8 @@ class WorkloadParser():
         thresh = 0.1 * max_count
         df = df.groupby("session_id").filter(
             lambda x: x["session_id"].count() > thresh)
+        mask = df["query"].map(lambda x: self._is_stmt(x))
+        df = df[mask == True]
         df["query"] = df["query"].map(lambda x: x.split("statement: ")[1])
         mask = df["query"].map(lambda x: not self._is_excluded(x))
         df = df[mask == True]
