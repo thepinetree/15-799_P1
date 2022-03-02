@@ -50,7 +50,7 @@ class Column:
         self.queries = set()
 
     def __str__(self):
-        return self.name
+        return self.table + '.' + self.name
 
     def get_name(self) -> str:
         return self.name
