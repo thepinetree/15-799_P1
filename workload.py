@@ -67,7 +67,7 @@ class Workload:
                 col.add_query(qid)
                 self.potential_cols.add(col)
         # Setup initial cost
-        self.cost = self.workload_cost()
+        self.cost = self._workload_cost()
         logging.debug(f"Setup complete. Initial workload cost: {self.cost}.")
 
     # Run iterative selection algorithm
