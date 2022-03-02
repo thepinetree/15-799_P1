@@ -5,6 +5,7 @@ import logging
 import parser
 import psutil
 import schema
+from pprint import pformat
 
 
 class Workload:
@@ -68,6 +69,9 @@ class Workload:
                 self.potential_cols.add(col)
         # Setup initial cost
         self.cost = self._workload_cost()
+        logging.debug(pformat(
+            [(str(col), len(col.get_queries())) for col in self.potential_cols]
+        ))
         logging.debug(f"Setup complete. Initial workload cost: {self.cost}.")
 
     # Run iterative selection algorithm
@@ -78,8 +82,6 @@ class Workload:
             # Evaluate each index and choose best
             for col in self.potential_cols:
                 self._evaluate_index(schema.Index([col]))
-                if self.terminate_iter:
-                    break
             if self.next_ind is not None:  # Index to improve workload found
                 if self.next_ind.get_size() > self.max_storage:  # Over capacity, attempt rebalance
                     can_rebalance = self._rebalance_indexes(self.next_ind)
