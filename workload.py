@@ -4,6 +4,7 @@ import logging
 import parser
 import psutil
 import schema
+from pprint import pformat
 
 
 class Workload:
@@ -56,6 +57,9 @@ class Workload:
                 col.add_query(qid)
                 self.potential_cols.add(col)
         self.cost = self.workload_cost()
+        logging.debug(pformat(
+            [(str(col), len(col.get_queries())) for col in self.potential_cols]
+        ))
         logging.debug(f"Setup complete. Initial workload cost: {self.cost}.")
 
     def select(self):
