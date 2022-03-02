@@ -96,6 +96,7 @@ class QueryParser:
         tokens = str(table).split()
         if len(tokens) == 1:
             tables[tokens[0]] = tokens[0]
+            return
         assert(len(tokens) == 2)
         tables[tokens[1]] = tokens[0]
 
@@ -111,7 +112,8 @@ class QueryParser:
                         filters.append('.'.join([table, tokens[1]]))
                     else:
                         assert(len(tables) == 1)
-                        filters.append('.'.join([tables.values([0]), strvar]))
+                        filters.append(
+                            '.'.join([next(iter(tables.values())), strvar]))
         elif isinstance(clause, sqlparse.sql.Parenthesis):
             for subclause in clause.tokens:
                 self._parse_where_token(subclause, filters)
