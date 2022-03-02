@@ -26,7 +26,6 @@ class Workload:
         # Best index under consideration
         self.next_ind = None
         # Suggested indexes to add
-        # TODO: consider change to dictionary
         self.config = []
         # Change in cost/size
         self.improvement = 0
