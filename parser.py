@@ -13,6 +13,7 @@ class QueryAttributes(TypedDict):
     filters: list[str]
     orders: list[str]
     groups: list[str]
+    sets: list[str]
 
 
 class KeywordType(Enum):
@@ -22,6 +23,7 @@ class KeywordType(Enum):
     UPDATE = 3
     GROUP_BY = 4
     ORDER_BY = 5
+    SET = 6
 
 
 class QueryParser:
@@ -30,10 +32,13 @@ class QueryParser:
 
     # NOTE: Assumes that an input query is well-formatted
     def parse(self, query: str) -> QueryAttributes:
-        num_queries = len(sqlparse.split(query))
+        # For whatever reason, one of sqlparse or python only occasionally does not treat
+        # semi-colons well so this is a hack to fix the issue
+        num_queries = len(sqlparse.split(repr(query.encode('unicode_escape'))))
         if (num_queries != 1):
             print(
-                "Queries must be parsed independently. Got %d, expected 1.", num_queries)
+                f"Queries must be parsed independently. Got {num_queries}, expected 1."
+            )
             assert(False)
         parsed_sql = sqlparse.parse(query)
         stmt = parsed_sql[0]
@@ -52,7 +57,7 @@ class QueryParser:
                     selects.append(str(token))
             if seen == KeywordType.UPDATE:
                 if isinstance(token, sqlparse.sql.Identifier):
-                    tables.append(str(token))
+                    self._parse_table_token(tables, token)
             if seen == KeywordType.FROM:
                 if isinstance(token, sqlparse.sql.IdentifierList):
                     for identifier in token.get_identifiers():
@@ -71,20 +76,28 @@ class QueryParser:
                         groups.append(str(identifier))
                 elif isinstance(token, sqlparse.sql.Identifier):
                     groups.append(str(token))
+            if seen == KeywordType.SET:
+                if isinstance(token, sqlparse.sql.IdentifierList):
+                    for identifier in token.get_identifiers():
+                        selects.append(str(identifier))
+                elif isinstance(token, sqlparse.sql.Identifier):
+                    selects.append(str(token))
             if isinstance(token, sqlparse.sql.Where):
                 seen = KeywordType.NONE
                 for where_token in token:
                     self._parse_where_token(tables, where_token, filters)
-            if token.ttype is sqlparse.sql.T.Keyword and token.value.upper() == "GROUP BY":
-                seen = KeywordType.GROUP_BY
-            if token.ttype is sqlparse.sql.T.Keyword and token.value.upper() == "ORDER BY":
-                seen = KeywordType.ORDER_BY
             if token.ttype is sqlparse.sql.T.Keyword and token.value.upper() == "FROM":
                 seen = KeywordType.FROM
             if token.ttype is sqlparse.sql.T.Keyword.DML and token.value.upper() == "SELECT":
                 seen = KeywordType.SELECT
             if token.ttype is sqlparse.sql.T.Keyword.DML and token.value.upper() == "UPDATE":
                 seen = KeywordType.UPDATE
+            if token.ttype is sqlparse.sql.T.Keyword and token.value.upper() == "GROUP BY":
+                seen = KeywordType.GROUP_BY
+            if token.ttype is sqlparse.sql.T.Keyword and token.value.upper() == "ORDER BY":
+                seen = KeywordType.ORDER_BY
+            if token.ttype is sqlparse.sql.T.Keyword and token.value.upper() == "SET":
+                seen = KeywordType.SET
         return {
             "selects": selects,
             "filters": filters,
@@ -131,7 +144,7 @@ class WorkloadParser():
         return "statement:" in q
 
     def _is_excluded(self, q: str) -> bool:
-        excluded_keywords = ["AS", "SET", "BEGIN", "COMMIT"]
+        excluded_keywords = ["AS", "BEGIN", "COMMIT"]
         for keyword in excluded_keywords:
             if keyword in q.split():
                 return True
@@ -161,7 +174,7 @@ class WorkloadParser():
 if __name__ == "__main__":
     qp = QueryParser()
     res = qp.parse(
-        '''SELECT * FROM review r, item i WHERE i.i_id = r.i_id and r.i_id=112 ORDER BY rating DESC, r.creation_date DESC LIMIT 10;''')
+        '''UPDATE item SET title = 'KY`U4GpwWeTqi\'']cjWVW@z" 9@N^GBOO_~;)Mt9W#z? 9@N^d8!fbty@CS<sOR$l}(+SY,*s$Cur7t#z0Exx\@GWsIlCAkXM_bK9l&ml%!P h/b=g|Yg;$2JH_w<uR7' WHERE i_id=295''')
     print(res)
-    wp = WorkloadParser("./input/test_input.csv")
+    wp = WorkloadParser("./input/starter.csv")
     pprint(wp.parse_queries())
