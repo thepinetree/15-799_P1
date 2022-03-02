@@ -144,10 +144,13 @@ class WorkloadParser():
         return "statement:" in q
 
     def _is_excluded(self, q: str) -> bool:
-        excluded_keywords = ["AS", "BEGIN", "COMMIT"]
-        for keyword in excluded_keywords:
-            if keyword in q.split():
-                return True
+        excluded_keywords = set(["AS", "BEGIN", "COMMIT"])
+        must_include = set(["SELECT", "UPDATE"])
+        q_tokens = set(q.split())
+        if len(excluded_keywords.intersection(q_tokens)) != 0:
+            return True
+        if len(must_include.intersection(q_tokens)) == 0:
+            return True
         return False
 
     # TODO: Use a more limited preprocessing technique
