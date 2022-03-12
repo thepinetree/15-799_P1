@@ -31,7 +31,7 @@ class Workload:
         # Change in cost/size
         self.improvement = 0
         # Output path for selected actions
-        f = open(constants.OUTPUT_PATH, 'a')
+        f = open(constants.OUTPUT_PATH, 'w')
         self.out = f
         # RAM space
         self.max_storage = psutil.virtual_memory().available
