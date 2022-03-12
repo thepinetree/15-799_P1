@@ -16,6 +16,8 @@ def task_project1():
         "actions": [
             'echo "Starting action generation."',
             run_alg,
+            'echo "Creating empty config file."',
+            'echo \'\' > config.json',
         ],
         # Always rerun this task.
         "uptodate": [False],
