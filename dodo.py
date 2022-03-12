@@ -39,7 +39,7 @@ def task_project1():
     }
 
 
-def project1_setup():
+def task_project1_setup():
     return {
         "actions": [
             'pip install enum',
