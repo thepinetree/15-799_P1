@@ -16,7 +16,7 @@ class Workload:
         self.potential_cols = set()
         # Map from table name -> table info
         self.tables = dict()
-        # Map from index name -> index info ordered by uses/size
+        # Map from index identifier -> index info ordered by uses/size
         self.indexes = OrderedDict()
         # Connector to database
         self.db = connector.Connector()
@@ -31,7 +31,7 @@ class Workload:
         # Change in cost/size
         self.improvement = 0
         # Output path for selected actions
-        f = open(constants.OUTPUT_PATH, 'a')
+        f = open(constants.OUTPUT_PATH, 'w')
         self.out = f
         # RAM space
         self.max_storage = psutil.virtual_memory().available
@@ -43,15 +43,17 @@ class Workload:
         # Read table information from DB
         tables = self.db.get_table_info()
         for table, cols in tables:
-            self.tables[table] = schema.Table(table, cols)
+            self.tables[table] = schema.Table(table, tuple(cols))
         # Read index information from DB
         ind_dict = dict()
         indexes = self.db.get_index_info()
-        for index, table, colnames, num_uses, size in indexes:
+        for name, table, colnames, num_uses, size in indexes:
             cols = [self.tables[table].get_cols()[col] for col in colnames]
-            ind_dict[index] = schema.Index(cols)
-            ind_dict[index].set_num_uses(num_uses)
-            ind_dict[index].set_size(size)
+            index = schema.Index(tuple(cols))
+            index.set_num_uses(num_uses)
+            index.set_size(size)
+            index.set_name(name)
+            ind_dict[index.get_identifier()] = index
         # Sort indexes by lowest usage factor (scans / size)
         self.indexes = OrderedDict(
             sorted(ind_dict.items(), key=lambda x: x[1].get_num_uses()/x[1].get_size()))
@@ -70,7 +72,8 @@ class Workload:
         # Setup initial cost
         self.cost = self._workload_cost()
         logging.debug(pformat(
-            [(str(col), len(col.get_queries())) for col in self.potential_cols]
+            [(col.to_str(), len(col.get_queries()))
+             for col in self.potential_cols]
         ))
         logging.debug(f"Setup complete. Initial workload cost: {self.cost}.")
 
@@ -81,7 +84,9 @@ class Workload:
             # # Single index selection phase
             # Evaluate each index and choose best
             for col in self.potential_cols:
-                self._evaluate_index(schema.Index([col]))
+                ind = schema.Index(tuple([col]))
+                if ind.get_identifier() not in self.indexes:
+                    self._evaluate_index(ind)
             if self.next_ind is not None:  # Index to improve workload found
                 if self.next_ind.get_size() > self.max_storage:  # Over capacity, attempt rebalance
                     can_rebalance = self._rebalance_indexes(self.next_ind)
@@ -174,15 +179,15 @@ class Workload:
         while ind_size > self.max_storage:  # Continue while we need to free up more storage
             if len(self.indexes) != 0:
                 # Consider the next existing index
-                worst_index_name = next(it)
-                w_num_uses = self.indexes[worst_index_name].get_num_uses()
-                w_size = self.indexes[worst_index_name].get_size()
+                worst_index = next(it)
+                w_num_uses = self.indexes[worst_index].get_num_uses()
+                w_size = self.indexes[worst_index].get_size()
                 # In the absence of cost information of existing indexes, we can choose to drop
                 # indexes by a proxy of uses/size with the assumption that all uses are similar
                 # in cost
                 # TODO: try to determine a better metric of index cost than num_uses
                 if num_uses/ind_size > w_num_uses/w_size:
-                    drop_inds.append(worst_index_name)
+                    drop_inds.append(worst_index)
                     self.max_storage -= w_size
                     continue
                 # The chosen index was not better than the existing index, give up
@@ -191,12 +196,12 @@ class Workload:
             return False
         # Write commands to drop all chosen indexes and remove from internal set of existing indexes
         # before adding new index
-        for drop_ind_name in drop_inds:
-            drop_ind = self.indexes[drop_ind_name]
+        for drop_ind_ident in drop_inds:
+            drop_ind = self.indexes[drop_ind_ident]
             self.out.write(self.drop_ind.drop_stmt() + ";\n")
             self.out.flush()
             self.max_storage -= drop_ind.get_size()
-            del self.indexes[drop_ind]
+            del self.indexes[drop_ind_ident]
         return True
 
     # Update workload cost and storage capacity based on single newly added index

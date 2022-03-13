@@ -1,7 +1,7 @@
 import parser
+from typing import Optional
 
 query_id = 0
-index_id = 0
 
 
 class Query:
@@ -49,7 +49,7 @@ class Column:
         # Queries with column appearing as indexable predicate
         self.queries = set()
 
-    def __str__(self):
+    def to_str(self):
         return self.table + '.' + self.name
 
     def get_name(self) -> str:
@@ -66,7 +66,7 @@ class Column:
 
 
 class Table:
-    def __init__(self, name: str, cols: list[str]):
+    def __init__(self, name: str, cols: tuple[str]):
         self.name = name
         self.cols = dict()
         for col in cols:
@@ -80,16 +80,40 @@ class Table:
 
 
 class Index:
-    def __init__(self, cols: list[Column]):
+    class Identifier:
+        def __init__(self, table: str, cols: tuple[Column, ...]):
+            self.table = table
+            self.cols = cols
+
+        def __eq__(self, other):
+            return self.table == other.table and self.cols == other.cols
+
+        def __hash__(self):
+            return hash((self.table, self.cols))
+
+        def get_table(self) -> str:
+            return self.table
+
+        def get_cols(self) -> tuple[Column, ...]:
+            return self.cols
+
+        def identifier_name(self) -> str:
+            return f"{self.table}__{'_'.join([col.get_name() for col in self.cols])}"
+
+        def table_str(self) -> str:
+            return self.table
+
+        def cols_str(self) -> str:
+            return f"{','.join([col.get_name() for col in self.cols])}"
+
+    def __init__(self, cols: tuple[Column, ...]):
         global index_id
         assert(len(cols) > 0)
         assert(False not in [col.get_table() ==
                cols[0].get_table() for col in cols])
-        # Unique ID. queryIDs are the internal, canonical representation of queries.
-        self.id = index_id
-        index_id += 1
-        self.table = cols[0].get_table()
-        self.cols = cols
+        # Unique identifier. These identifiers are the internal, canonical representation of indexes.
+        self.identifier = self.Identifier(cols[0].get_table(), cols)
+        self.name = None
         self.oid = None
         self.size = 0
         self.num_uses = 0
@@ -97,23 +121,23 @@ class Index:
     def __str__(self) -> str:
         return self.create_stmt()
 
-    def _name(self) -> str:
-        return f"_tune_{self.id}"
+    def get_cols(self) -> tuple[Column, ...]:
+        return self.identifier.get_cols()
 
-    def _table_str(self) -> str:
-        return str(self.table)
+    def get_identifier(self) -> Identifier:
+        return self.identifier
 
-    def _cols_str(self) -> str:
-        return f"{','.join([col.get_name() for col in self.cols])}"
+    def set_name(self, name: str):
+        self.name = name
 
-    def get_cols(self) -> list[Column]:
-        return self.cols
-
-    def get_oid(self) -> int:
-        return self.oid
+    def get_name(self) -> Optional[str]:
+        return self.name
 
     def set_oid(self, oid: int):
         self.oid = oid
+
+    def get_oid(self) -> int:
+        return self.oid
 
     def set_size(self, size: int):
         self.size = size
@@ -128,7 +152,12 @@ class Index:
         return self.num_uses
 
     def create_stmt(self) -> str:
-        return f"CREATE INDEX {self._name()} ON {self._table_str()} ({self._cols_str()})"
+        name = self.name
+        if name is None:
+            name = self.identifier.identifier_name()
+        return f"CREATE INDEX tune_{name} ON {self.identifier.table_str()} ({self.identifier.cols_str()})"
 
+    # Only non-hypothetical indexes can be dropped, which must always use `set_name`
     def drop_stmt(self) -> str:
-        return f"DROP INDEX {self._name()}"
+        assert(self.name is not None)
+        return f"DROP INDEX {self.name}"
