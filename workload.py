@@ -52,7 +52,7 @@ class Workload:
             index = schema.Index(cols)
             index.set_num_uses(num_uses)
             index.set_size(size)
-            index.set_size(name)
+            index.set_name(name)
             ind_dict[index.get_identifier()] = index
         # Sort indexes by lowest usage factor (scans / size)
         self.indexes = OrderedDict(
