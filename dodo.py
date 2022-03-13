@@ -42,7 +42,6 @@ def task_project1():
 def task_project1_setup():
     return {
         "actions": [
-            'pip install enum',
             'pip install logging',
             'pip install psycopg',
             'pip install pandas',

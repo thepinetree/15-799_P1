@@ -92,7 +92,7 @@ class Index:
             return self.cols
 
         def identifier_name(self) -> str:
-            return f"{self.table}-{'_'.join([col.get_name() for col in self.cols])}"
+            return f"{self.table}__{'_'.join([col.get_name() for col in self.cols])}"
 
         def table_str(self) -> str:
             return self.table
@@ -149,7 +149,7 @@ class Index:
         name = self.name
         if name is None:
             name = self.identifier.identifier_name()
-        return f"CREATE INDEX {name} ON {self.identifier.table_str()} ({self.identifier.cols_str()})"
+        return f"CREATE INDEX tune_{name} ON {self.identifier.table_str()} ({self.identifier.cols_str()})"
 
     # Only non-hypothetical indexes can be dropped, which must always use `set_name`
     def drop_stmt(self) -> str:
