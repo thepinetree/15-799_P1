@@ -104,6 +104,7 @@ class Connector():
             info.append((index_name, table, cols, num_scans, size))
         return info
 
+    # TODO: Consider using sqlparse to parse this string
     def _parse_index_info(self, info: str) -> tuple[str, list[str]]:
         s1 = info.split(" USING ")
         assert(len(s1) == 2)
