@@ -76,7 +76,7 @@ class Connector():
         self.exec_commit_no_result("ANALYZE;")
 
     # TODO: Consider removing restrictions on tables considered
-    def get_db_info(self) -> list[(str, list[str])]:
+    def get_table_info(self) -> list[(str, list[str])]:
         info = []
         tables = self.exec_commit(
             "SELECT relname FROM pg_class WHERE relkind='r' AND relname NOT LIKE 'pg_%' AND relname NOT LIKE 'sql_%';")
@@ -89,6 +89,34 @@ class Connector():
             info.append((table, cols))
         return info
 
+    # TODO: Consider removing restrictions on indexes considered
+    def get_index_info(self) -> list[(str, str, list[str], int, int)]:
+        info = []
+        indexes = self.exec_commit(
+            "SELECT indexname, indexdef FROM pg_indexes WHERE indexname NOT LIKE 'pg_%';")
+        for index in indexes:
+            index_name = index[0]
+            indexdef = index[1]
+            table, cols = self._parse_index_info(indexdef)
+            stats = self.exec_commit(
+                f"SELECT idx_scan, pg_relation_size(indexrelname::text) FROM pg_stat_all_indexes WHERE indexrelname='{index_name}';")
+            num_scans, size = stats[0]
+            info.append((index_name, table, cols, num_scans, size))
+        return info
+
+    def _parse_index_info(self, info: str) -> tuple[str, list[str]]:
+        s1 = info.split(" USING ")
+        assert(len(s1) == 2)
+        s2 = s1[0].split(" ON ")
+        assert(len(s2) == 2)
+        s3 = s2[1].split('.')
+        assert(len(s3) == 2)
+        table = s3[1]
+        s4 = s1[1]
+        s5 = s4[s4.find("(")+1:s4.find(")")]
+        cols = s5.split(', ')
+        return table, cols
+
 
 if __name__ == "__main__":
     db = Connector()
@@ -96,10 +124,12 @@ if __name__ == "__main__":
     res = db.exec_commit(q)
     print(f"Execution result: {res}")
     c0 = db.get_cost(q)
-    oid = db.simulate_index("pg_1", "review", "i_id")
+    oid = db.simulate_index("CREATE INDEX _pg_1 ON review (i_id)")
     print(f"Hypopg index oid: {oid}")
     c1 = db.get_cost(q)
     print(f"Cost reduced from {c0} to {c1}")
     db.drop_simulated_index(oid)
-    info = db.get_db_info()
-    print(info)
+    tables = db.get_table_info()
+    print(tables)
+    inds = db.get_index_info()
+    print(inds)

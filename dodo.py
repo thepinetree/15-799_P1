@@ -40,9 +40,14 @@ def task_project1():
 def project1_setup():
     return {
         "actions": [
+            'pip install enum',
+            'pip install logging',
             'pip install psycopg',
             'pip install pandas',
+            'pip install pprint',
+            'pip install psutil',
             'pip install sqlparse',
+            'pip install typing',
         ],
         # Always rerun this task.
         "uptodate": [False],
