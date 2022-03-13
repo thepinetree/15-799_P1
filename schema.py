@@ -66,7 +66,7 @@ class Column:
 
 
 class Table:
-    def __init__(self, name: str, cols: list[str]):
+    def __init__(self, name: str, cols: tuple[str]):
         self.name = name
         self.cols = dict()
         for col in cols:
@@ -81,14 +81,20 @@ class Table:
 
 class Index:
     class Identifier:
-        def __init__(self, table: str, cols: list[Column]):
+        def __init__(self, table: str, cols: tuple[Column, ...]):
             self.table = table
             self.cols = cols
+
+        def __eq__(self, other):
+            return self.table == other.table and self.cols == other.cols
+
+        def __hash__(self):
+            return hash((self.table, self.cols))
 
         def get_table(self) -> str:
             return self.table
 
-        def get_cols(self) -> list[Column]:
+        def get_cols(self) -> tuple[Column, ...]:
             return self.cols
 
         def identifier_name(self) -> str:
@@ -100,7 +106,7 @@ class Index:
         def cols_str(self) -> str:
             return f"{','.join([col.get_name() for col in self.cols])}"
 
-    def __init__(self, cols: list[Column]):
+    def __init__(self, cols: tuple[Column, ...]):
         global index_id
         assert(len(cols) > 0)
         assert(False not in [col.get_table() ==
@@ -115,7 +121,7 @@ class Index:
     def __str__(self) -> str:
         return self.create_stmt()
 
-    def get_cols(self) -> list[Column]:
+    def get_cols(self) -> tuple[Column, ...]:
         return self.identifier.get_cols()
 
     def get_identifier(self) -> Identifier:

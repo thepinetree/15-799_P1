@@ -43,13 +43,13 @@ class Workload:
         # Read table information from DB
         tables = self.db.get_table_info()
         for table, cols in tables:
-            self.tables[table] = schema.Table(table, cols)
+            self.tables[table] = schema.Table(table, tuple(cols))
         # Read index information from DB
         ind_dict = dict()
         indexes = self.db.get_index_info()
         for name, table, colnames, num_uses, size in indexes:
             cols = [self.tables[table].get_cols()[col] for col in colnames]
-            index = schema.Index(cols)
+            index = schema.Index(tuple(cols))
             index.set_num_uses(num_uses)
             index.set_size(size)
             index.set_name(name)
@@ -84,7 +84,9 @@ class Workload:
             # # Single index selection phase
             # Evaluate each index and choose best
             for col in self.potential_cols:
-                self._evaluate_index(schema.Index([col]))
+                ind = schema.Index(tuple([col]))
+                if ind.get_identifier() not in self.indexes:
+                    self._evaluate_index(ind)
             if self.next_ind is not None:  # Index to improve workload found
                 if self.next_ind.get_size() > self.max_storage:  # Over capacity, attempt rebalance
                     can_rebalance = self._rebalance_indexes(self.next_ind)
