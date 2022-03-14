@@ -42,10 +42,8 @@ def task_project1():
 def task_project1_setup():
     return {
         "actions": [
-            'pip install logging',
             'pip install psycopg',
             'pip install pandas',
-            'pip install pprint',
             'pip install psutil',
             'pip install sqlparse',
             'pip install typing',
