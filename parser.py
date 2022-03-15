@@ -186,22 +186,26 @@ class WorkloadParser():
         df = df[mask]
         mask = df["query"].map(lambda x: not self._is_excluded(x))
         df = df[mask]
+        df["query"] = df["query"].map(
+            lambda x: x.removeprefix("statement: "))
+        df["sanitized"] = df["query"]
         # NOTE: This fixes the weird quote removal that csv readers in python do, replacing all
         # individual single quotes with two single quotes and all individual double quotes with two
         # double quotes.
-        df["query"] = df["query"].map(lambda x: x.replace("'", "''"))
-        df["query"] = df["query"].map(lambda x: x.replace('"', '""'))
+        df["sanitized"] = df["sanitized"].map(lambda x: x.replace("'", "''"))
+        df["sanitized"] = df["sanitized"].map(lambda x: x.replace('"', '""'))
         # NOTE: We wish to keep the first single quote and last single quote intact to indicate
         # the edges of values
-        df["query"] = df["query"].map(lambda x: x.replace("''", "'", 1))
-        df["query"] = df["query"].map(lambda x: x.replace("''", "'", -1))
+        df["sanitized"] = df["sanitized"].map(
+            lambda x: x.replace("''", "'", 1))
+        df["sanitized"] = df["sanitized"].map(
+            lambda x: x.replace("''", "'", -1))
         # NOTE: This gets rid of problematic backslashes (e.g. in the substring \'')
-        df["query"] = df["query"].map(lambda x: x.replace("\\", ""))
-        df["query"] = df["query"].map(lambda x: x.removeprefix("statement: "))
-        queries = list(df["query"])
+        df["sanitized"] = df["sanitized"].map(lambda x: x.replace("\\", ""))
+        queries = df[["query", "sanitized"]].values.tolist()
         res = []
-        for query in queries:
-            res.append((query, self.parser.parse(query)))
+        for val in queries:
+            res.append((val[0], self.parser.parse(val[1])))
         return res
 
 
@@ -233,27 +237,27 @@ if __name__ == "__main__":
         'types': ['id', 'category', 'value_type', 'name', 'comment']
     }
     # NOTE: The sample queries assume Epinions is loaded in the DB
-    # qp = QueryParser(sample_schema_epinions)
-    # res = qp.parse(
-    #     '''
-    #     SELECT * FROM review r, item i
-    #     WHERE i.i_id = r.i_id and r.i_id=652
-    #     ORDER BY rating DESC, r.creation_date DESC
-    #     LIMIT 10
-    #     '''
-    # )
-    # print(res)
-    # res = qp.parse(
-    #     '''
-    #     SELECT * FROM item i, review r WHERE a_id = title ORDER BY description GROUP BY a_id
-    #     '''
-    # )
-    # print(res)
-    # res = qp.parse(
-    #     '''
-    #     UPDATE item SET title = ',lOuh%)7^Ob`\''dxFXbpV*sNN@Hlt#+z4%.h~""So%u_~q.)0WHHk,B YKsxa|@""A4X!(W@x&""x@TFnx=.<8v`h2Dbpo}XB84H{$2|+6''0xpsSasGG""""s2@^l]kw''kfaU' WHERE i_id=214
-    #     '''
-    # )
-    # print(res)
+    qp = QueryParser(sample_schema_epinions)
+    res = qp.parse(
+        '''
+        SELECT * FROM review r, item i
+        WHERE i.i_id = r.i_id and r.i_id=652
+        ORDER BY rating DESC, r.creation_date DESC
+        LIMIT 10
+        '''
+    )
+    print(res)
+    res = qp.parse(
+        '''
+        SELECT * FROM item i, review r WHERE a_id = title ORDER BY description GROUP BY a_id
+        '''
+    )
+    print(res)
+    res = qp.parse(
+        '''
+        UPDATE item SET title = ',lOuh%)7^Ob`\''dxFXbpV*sNN@Hlt#+z4%.h~""So%u_~q.)0WHHk,B YKsxa|@""A4X!(W@x&""x@TFnx=.<8v`h2Dbpo}XB84H{$2|+6''0xpsSasGG""""s2@^l]kw''kfaU' WHERE i_id=214
+        '''
+    )
+    print(res)
     wp = WorkloadParser("./input/timeseries.csv", sample_schema_timeseries)
     pprint(wp.parse_queries())
