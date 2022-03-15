@@ -42,7 +42,7 @@ class Workload:
     def setup(self, wf: str):
         # Read table information from DB
         tables = self.db.get_table_info()
-        for table, cols in tables:
+        for table, cols in tables.items():
             self.tables[table] = schema.Table(table, tuple(cols))
         # Read index information from DB
         ind_dict = dict()
@@ -58,7 +58,7 @@ class Workload:
         self.indexes = OrderedDict(
             sorted(ind_dict.items(), key=lambda x: x[1].get_num_uses()/x[1].get_size()))
         # Parse workload queries
-        wp = parser.WorkloadParser(wf)
+        wp = parser.WorkloadParser(wf, tables)
         parsed = wp.parse_queries()
         for query, attrs in parsed:
             q = schema.Query(query, attrs)

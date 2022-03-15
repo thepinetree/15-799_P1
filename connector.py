@@ -8,7 +8,8 @@ class Connector():
     def __init__(self):
         self._connection = psycopg.connect(dbname=constants.DB_NAME,
                                            user=constants.DB_USER,
-                                           password=constants.DB_PASS)
+                                           password=constants.DB_PASS,
+                                           host=constants.DB_HOST)
         self._connection.autocommit = constants.AUTOCOMMIT
         logging.debug(
             f"Connected to {constants.DB_NAME} as {constants.DB_USER}")
@@ -76,8 +77,8 @@ class Connector():
         self.exec_commit_no_result("ANALYZE;")
 
     # TODO: Consider removing restrictions on tables considered
-    def get_table_info(self) -> list[(str, list[str])]:
-        info = []
+    def get_table_info(self) -> dict[str, list[str]]:
+        info = dict()
         tables = self.exec_commit(
             "SELECT relname FROM pg_class WHERE relkind='r' AND relname NOT LIKE 'pg_%' AND relname NOT LIKE 'sql_%';")
         for table in tables:
@@ -86,7 +87,7 @@ class Connector():
                 f"SELECT column_name FROM information_schema.columns WHERE table_name='{table}';")
             for i in range(len(cols)):
                 cols[i] = cols[i][0]
-            info.append((table, cols))
+            info[table] = cols
         return info
 
     # TODO: Consider removing restrictions on indexes considered
@@ -120,6 +121,7 @@ class Connector():
 
 
 if __name__ == "__main__":
+    # NOTE: Assumes Epinions is loaded in the DB
     db = Connector()
     q = "SELECT * FROM review r, item i WHERE i.i_id = r.i_id and r.i_id=112 ORDER BY rating DESC, r.creation_date DESC LIMIT 10;"
     res = db.exec_commit(q)
