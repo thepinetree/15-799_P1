@@ -74,9 +74,9 @@ class Workload:
                 col.add_query(qid)
                 _dbg_col_refs.add(col)
             for _, table in self.tables.items():
-                indexed_cols = table.get_indexed_cols()
+                referenced_cols = table.get_referenced_cols()
                 for num_cols in range(1, constants.MAX_INDEX_WIDTH + 1):
-                    for subset in itertools.combinations(indexed_cols, num_cols):
+                    for subset in itertools.combinations(referenced_cols, num_cols):
                         self.potential_inds.add(tuple(subset))
         # Setup initial cost
         self.cost = self._workload_cost()

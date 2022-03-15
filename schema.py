@@ -73,7 +73,7 @@ class Table:
     def __init__(self, name: str, cols: tuple[str]):
         self.name = name
         self.cols = dict()
-        self.indexed_cols = set()
+        self.referenced_cols = set()
         for col in cols:
             self.cols[col] = Column(self.name, col)
 
@@ -83,11 +83,11 @@ class Table:
     def get_cols(self) -> dict[str, Column]:
         return self.cols
 
-    def add_indexed_col(self, col: Column):
-        self.indexed_cols.add(col)
+    def add_referenced_col(self, col: Column):
+        self.referenced_cols.add(col)
 
-    def get_indexed_cols(self) -> set[Column]:
-        return self.indexed_cols
+    def get_referenced_cols(self) -> set[Column]:
+        return self.referenced_cols
 
 
 class Index:
@@ -122,7 +122,8 @@ class Index:
         assert(len(cols) > 0)
         assert(False not in [col.get_table() ==
                cols[0].get_table() for col in cols])
-        # Unique identifier. These identifiers are the internal, canonical representation of indexes.
+        # Unique identifier. These identifiers are the internal, canonical representation
+        # of indexes.
         self.identifier = self.Identifier(cols[0].get_table(), cols)
         self.name = None
         self.oid = None
