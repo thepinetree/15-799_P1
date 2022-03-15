@@ -27,14 +27,12 @@ class KeywordType(Enum):
 
 
 class QueryParser:
-    def __init__(self):
-        pass
+    def __init__(self, schemas: dict[str, list[str]]):
+        self.schemas = schemas
 
     # NOTE: Assumes that an input query is well-formatted
     def parse(self, query: str) -> QueryAttributes:
-        # For whatever reason, one of sqlparse or python only occasionally does not treat
-        # semi-colons well so this is a hack to fix the issue
-        num_queries = len(sqlparse.split(repr(query.encode('unicode_escape'))))
+        num_queries = len(sqlparse.split(query))
         if (num_queries != 1):
             print(
                 f"Queries must be parsed independently. Got {num_queries}, expected 1."
@@ -47,9 +45,12 @@ class QueryParser:
         filters = []
         orders = []
         groups = []
+        sets = []
         seen = KeywordType.NONE
         for token in stmt.tokens:
             if seen == KeywordType.SELECT:
+                # TODO: Select does not qualify columns, must be done in a second pass. Since we
+                # do not _actively_ use select cols, we ignore this for now.
                 if isinstance(token, sqlparse.sql.IdentifierList):
                     for identifier in token.get_identifiers():
                         selects.append(str(identifier))
@@ -57,35 +58,42 @@ class QueryParser:
                     selects.append(str(token))
             if seen == KeywordType.UPDATE:
                 if isinstance(token, sqlparse.sql.Identifier):
-                    self._parse_table_token(tables, token)
+                    self._parse_table_token(tables, str(token))
             if seen == KeywordType.FROM:
                 if isinstance(token, sqlparse.sql.IdentifierList):
                     for identifier in token.get_identifiers():
-                        self._parse_table_token(tables, identifier)
+                        self._parse_table_token(tables, str(identifier))
                 elif isinstance(token, sqlparse.sql.Identifier):
-                    self._parse_table_token(tables, token)
+                    self._parse_table_token(tables, str(token))
             if seen == KeywordType.ORDER_BY:
                 if isinstance(token, sqlparse.sql.IdentifierList):
                     for identifier in token.get_identifiers():
-                        orders.append(str(identifier))
+                        orders.append(self._qualify_column(
+                            tables, self._sanitize_orderby_token(str(identifier))))
                 elif isinstance(token, sqlparse.sql.Identifier):
-                    orders.append(str(token))
+                    orders.append(self._qualify_column(
+                        tables, self._sanitize_orderby_token(str(token))))
             if seen == KeywordType.GROUP_BY:
                 if isinstance(token, sqlparse.sql.IdentifierList):
                     for identifier in token.get_identifiers():
-                        groups.append(str(identifier))
+                        groups.append(self._qualify_column(
+                            tables, str(identifier)))
                 elif isinstance(token, sqlparse.sql.Identifier):
-                    groups.append(str(token))
+                    groups.append(self._qualify_column(tables, str(token)))
             if seen == KeywordType.SET:
-                if isinstance(token, sqlparse.sql.IdentifierList):
+                if (isinstance(token, sqlparse.sql.Comparison) or
+                        isinstance(token, sqlparse.sql.Parenthesis)):
+                    self._parse_expr_token(tables, token, sets)
+                elif isinstance(token, sqlparse.sql.IdentifierList):
                     for identifier in token.get_identifiers():
-                        selects.append(str(identifier))
+                        sets.append(
+                            self._qualify_column(tables, str(identifier)))
                 elif isinstance(token, sqlparse.sql.Identifier):
-                    selects.append(str(token))
+                    sets.append(self._qualify_column(tables, str(token)))
             if isinstance(token, sqlparse.sql.Where):
                 seen = KeywordType.NONE
                 for where_token in token:
-                    self._parse_where_token(tables, where_token, filters)
+                    self._parse_expr_token(tables, where_token, filters)
             if token.ttype is sqlparse.sql.T.Keyword and token.value.upper() == "FROM":
                 seen = KeywordType.FROM
             if token.ttype is sqlparse.sql.T.Keyword.DML and token.value.upper() == "SELECT":
@@ -103,41 +111,53 @@ class QueryParser:
             "filters": filters,
             "orders": orders,
             "groups": groups,
+            "sets": sets
         }
 
-    def _parse_table_token(self, tables: dict[str, str], table: sqlparse.sql.Token):
-        tokens = str(table).split()
+    def _parse_table_token(self, tables: dict[str, str], table: str):
+        tokens = table.split()
         if len(tokens) == 1:
             tables[tokens[0]] = tokens[0]
             return
         assert(len(tokens) == 2)
         tables[tokens[1]] = tokens[0]
 
-    def _parse_where_token(self, tables: dict[str, str], clause: sqlparse.sql.Token, filters: list[str]):
+    def _sanitize_orderby_token(self, col: str) -> str:
+        no_whitespace = col.rstrip()
+        sanitized = no_whitespace.removesuffix(' DESC').removesuffix(' ASC')
+        return sanitized
+
+    def _parse_expr_token(self, tables: dict[str, str],
+                          clause: sqlparse.sql.Token, results: set[str]):
         if isinstance(clause, sqlparse.sql.Comparison):
             for var in clause:
                 if isinstance(var, sqlparse.sql.Identifier):
                     strvar = str(var)
-                    if '.' in strvar:
-                        tokens = strvar.split('.')
-                        assert(len(tokens) == 2)
-                        table = tables[tokens[0]]
-                        filters.append('.'.join([table, tokens[1]]))
-                    else:
-                        assert(len(tables) == 1)
-                        filters.append(
-                            '.'.join([next(iter(tables.values())), strvar]))
+                    results.append(self._qualify_column(tables, strvar))
         elif isinstance(clause, sqlparse.sql.Parenthesis):
             for subclause in clause.tokens:
-                self._parse_where_token(subclause, filters)
+                self._parse_expr_token(subclause, results)
 
-    # TODO: Use table schema to prepend correct table to var in case multiple tables have column
-    # def _qualify_column()
+    # Use table schema to prepend correct table to var in case multiple tables have same column name
+    def _qualify_column(self, tables: dict[str, str], col: str) -> str:
+        res = ""
+        if '.' in col:
+            tokens = col.split('.')
+            assert(len(tokens) == 2)
+            table = tables[tokens[0]]
+            res = '.'.join([table, tokens[1]])
+        else:
+            for _, table in tables.items():
+                if col in self.schemas[table]:
+                    assert(res == "")
+                    res = '.'.join([table, col])
+        assert(res != "")
+        return res
 
 
 class WorkloadParser():
-    def __init__(self, wf: str):
-        self.parser = QueryParser()
+    def __init__(self, wf: str, schemas: dict[str, list[str]]):
+        self.parser = QueryParser(schemas)
         self.input = wf
 
     def _is_stmt(self, q: str) -> bool:
@@ -155,29 +175,89 @@ class WorkloadParser():
 
     # TODO: Use a more limited preprocessing technique
     def parse_queries(self) -> list[(str, QueryAttributes)]:
-        df = pandas.read_csv(self.input, usecols=[5, 13], header=None)
-        df.columns = ["session_id", "query"]
+        df = pandas.read_csv(self.input, sep=',', usecols=[5, 13],
+                             header=None, names=["session_id", "query"])
         counts = df.groupby("session_id").aggregate("count")
         max_count = counts.max()
         thresh = 0.1 * max_count
         df = df.groupby("session_id").filter(
             lambda x: x["session_id"].count() > thresh)
         mask = df["query"].map(lambda x: self._is_stmt(x))
-        df = df[mask == True]
-        df["query"] = df["query"].map(lambda x: x.split("statement: ")[1])
+        df = df[mask]
         mask = df["query"].map(lambda x: not self._is_excluded(x))
-        df = df[mask == True]
-        queries = list(df["query"])
+        df = df[mask]
+        df["query"] = df["query"].map(
+            lambda x: x.removeprefix("statement: "))
+        df["sanitized"] = df["query"]
+        # NOTE: This fixes the weird quote removal that csv readers in python do, replacing all
+        # individual single quotes with two single quotes and all individual double quotes with two
+        # double quotes.
+        df["sanitized"] = df["sanitized"].map(lambda x: x.replace("'", "''"))
+        df["sanitized"] = df["sanitized"].map(lambda x: x.replace('"', '""'))
+        # NOTE: We wish to keep the first single quote and last single quote intact to indicate
+        # the edges of values
+        df["sanitized"] = df["sanitized"].map(
+            lambda x: x.replace("''", "'", 1))
+        df["sanitized"] = df["sanitized"].map(
+            lambda x: x.replace("''", "'", -1))
+        # NOTE: This gets rid of problematic backslashes (e.g. in the substring \'')
+        df["sanitized"] = df["sanitized"].map(lambda x: x.replace("\\", ""))
+        queries = df[["query", "sanitized"]].values.tolist()
         res = []
-        for query in queries:
-            res.append((query, self.parser.parse(query)))
+        for val in queries:
+            res.append((val[0], self.parser.parse(val[1])))
         return res
 
 
 if __name__ == "__main__":
-    qp = QueryParser()
+    sample_schema_epinions = {
+        'item': ['i_id', 'creation_date', 'title', 'description'],
+        'review': ['rating', 'u_id', 'i_id', 'a_id', 'rank', 'creation_date', 'comment'],
+        'review_rating': ['u_id', 'a_id', 'rating', 'status', 'creation_date',
+                          'last_mod_date', 'type', 'vertical_id'],
+        'trust': ['source_u_id', 'target_u_id', 'trust', 'creation_date'],
+        'useracct': ['u_id', 'creation_date', 'name', 'email']
+    }
+    sample_schema_jungle = {
+        'jungle': ['timestamp_field9', 'int_field0', 'int_field1', 'int_field2', 'int_field3',
+                   'int_field4',  'int_field5', 'int_field6', 'int_field7', 'int_field8',
+                   'int_field9', 'float_field0',  'float_field1', 'float_field2', 'float_field3',
+                   'float_field4', 'float_field5', 'float_field6',  'float_field7', 'float_field8',
+                   'float_field9', 'timestamp_field0', 'timestamp_field1',  'timestamp_field2',
+                   'timestamp_field3', 'timestamp_field4', 'timestamp_field5', 'timestamp_field6',
+                   'timestamp_field7', 'timestamp_field8', 'varchar_field9', 'uuid_field',
+                   'varchar_field0',  'varchar_field1', 'varchar_field2', 'varchar_field3',
+                   'varchar_field4', 'varchar_field5',  'varchar_field6', 'varchar_field7',
+                   'varchar_field8']
+    }
+    sample_schema_timeseries = {
+        'sources': ['id', 'created_time', 'name', 'comment'],
+        'sessions': ['id', 'source_id', 'created_time', 'agent'],
+        'observations': ['source_id', 'session_id', 'type_id', 'value', 'created_time'],
+        'types': ['id', 'category', 'value_type', 'name', 'comment']
+    }
+    # NOTE: The sample queries assume Epinions is loaded in the DB
+    qp = QueryParser(sample_schema_epinions)
     res = qp.parse(
-        '''UPDATE item SET title = 'KY`U4GpwWeTqi\'']cjWVW@z" 9@N^GBOO_~;)Mt9W#z? 9@N^d8!fbty@CS<sOR$l}(+SY,*s$Cur7t#z0Exx\@GWsIlCAkXM_bK9l&ml%!P h/b=g|Yg;$2JH_w<uR7' WHERE i_id=295''')
+        '''
+        SELECT * FROM review r, item i
+        WHERE i.i_id = r.i_id and r.i_id=652
+        ORDER BY rating DESC, r.creation_date DESC
+        LIMIT 10
+        '''
+    )
     print(res)
-    wp = WorkloadParser("./input/starter.csv")
+    res = qp.parse(
+        '''
+        SELECT * FROM item i, review r WHERE a_id = title ORDER BY description GROUP BY a_id
+        '''
+    )
+    print(res)
+    res = qp.parse(
+        '''
+        UPDATE item SET title = ',lOuh%)7^Ob`\''dxFXbpV*sNN@Hlt#+z4%.h~""So%u_~q.)0WHHk,B YKsxa|@""A4X!(W@x&""x@TFnx=.<8v`h2Dbpo}XB84H{$2|+6''0xpsSasGG""""s2@^l]kw''kfaU' WHERE i_id=214
+        '''
+    )
+    print(res)
+    wp = WorkloadParser("./input/timeseries.csv", sample_schema_timeseries)
     pprint(wp.parse_queries())
