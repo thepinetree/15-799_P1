@@ -70,7 +70,7 @@ class Workload:
             for col_ident in q.get_indexable_cols():
                 table, col = col_ident.split('.')
                 col = self.tables[table].get_cols()[col]
-                self.tables[table].add_indexed_col(col)
+                self.tables[table].add_referenced_col(col)
                 col.add_query(qid)
                 _dbg_col_refs.add(col)
             for _, table in self.tables.items():
