@@ -1,6 +1,7 @@
 from collections import OrderedDict
 import connector
 import constants
+import itertools
 import logging
 import parser
 import psutil
@@ -12,8 +13,8 @@ class Workload:
     def __init__(self):
         # Map from queryID -> Query object (attrs, cost, text)
         self.queries = dict()
-        # Potential columns to index
-        self.potential_cols = set()
+        # Potential index configs
+        self.potential_inds = set()
         # Map from table name -> table info
         self.tables = dict()
         # Map from index identifier -> index info ordered by uses/size
@@ -60,6 +61,7 @@ class Workload:
         # Parse workload queries
         wp = parser.WorkloadParser(wf, tables)
         parsed = wp.parse_queries()
+        _dbg_col_refs = set()
         for query, attrs in parsed:
             q = schema.Query(query, attrs)
             qid = q.get_id()
@@ -67,24 +69,31 @@ class Workload:
             for col_ident in q.get_indexable_cols():
                 table, col = col_ident.split('.')
                 col = self.tables[table].get_cols()[col]
+                self.tables[table].add_indexed_col(col)
                 col.add_query(qid)
-                self.potential_cols.add(col)
+                _dbg_col_refs.add(col)
+            for _, table in self.tables.items():
+                indexed_cols = table.get_indexed_cols()
+                for num_cols in range(1, constants.MAX_INDEX_WIDTH + 1):
+                    for subset in itertools.combinations(indexed_cols, num_cols):
+                        self.potential_inds.add(tuple(subset))
         # Setup initial cost
         self.cost = self._workload_cost()
-        logging.debug(pformat(
-            [(col.to_str(), len(col.get_queries()))
-             for col in self.potential_cols]
-        ))
+        logging.debug("Col -> query counts: {0}".format(pformat(
+            [(col.to_str(), len(col.get_queries())) for col in _dbg_col_refs]
+        )))
+        logging.debug("Potential indexes: {0}".format(pformat(
+            [[[col.to_str() for col in cols] for cols in self.potential_inds]]
+        )))
         logging.debug(f"Setup complete. Initial workload cost: {self.cost}.")
 
     # Run iterative selection algorithm
     def select(self):
         while not self.terminate_iter:
-            # TODO: remove assumption of single column index
-            # # Single index selection phase
+            # # Index selection phase
             # Evaluate each index and choose best
-            for col in self.potential_cols:
-                ind = schema.Index(tuple([col]))
+            for cols in self.potential_inds:
+                ind = schema.Index(cols)
                 if ind.get_identifier() not in self.indexes:
                     self._evaluate_index(ind)
             if self.next_ind is not None:  # Index to improve workload found
@@ -110,8 +119,7 @@ class Workload:
                 logging.debug(
                     f"Applying '{self.next_ind}'. New workload cost estimate: {self.cost}."
                 )
-                # TODO: remove assumption of single column index
-                self.potential_cols.remove(self.next_ind.get_cols()[0])
+                self.potential_inds.remove(self.next_ind.get_cols())
                 self.next_ind = None
                 self.improvement = 0
             else:  # Stop when there is no benefit to the workload

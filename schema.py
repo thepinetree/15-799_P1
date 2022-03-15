@@ -1,5 +1,6 @@
-import parser
 from typing import Optional
+
+import parser
 
 query_id = 0
 
@@ -32,12 +33,15 @@ class Query:
     def get_str(self) -> str:
         return self.query
 
-    # TODO: Consider other structures for output with more information
     def get_indexable_cols(self) -> list[str]:
         cols = set()
         for col_ident in self.attrs["filters"]:
             cols.add(col_ident)
-        return list(cols)
+        for col_ident in self.attrs["groups"]:
+            cols.add(col_ident)
+        for col_ident in self.attrs["orders"]:
+            cols.add(col_ident)
+        return cols
 
 
 class Column:
@@ -49,7 +53,7 @@ class Column:
         # Queries with column appearing as indexable predicate
         self.queries = set()
 
-    def to_str(self):
+    def to_str(self) -> str:
         return self.table + '.' + self.name
 
     def get_name(self) -> str:
@@ -69,6 +73,7 @@ class Table:
     def __init__(self, name: str, cols: tuple[str]):
         self.name = name
         self.cols = dict()
+        self.indexed_cols = set()
         for col in cols:
             self.cols[col] = Column(self.name, col)
 
@@ -77,6 +82,12 @@ class Table:
 
     def get_cols(self) -> dict[str, Column]:
         return self.cols
+
+    def add_indexed_col(self, col: Column):
+        self.indexed_cols.add(col)
+
+    def get_indexed_cols(self) -> set[Column]:
+        return self.indexed_cols
 
 
 class Index:

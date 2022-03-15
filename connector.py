@@ -94,7 +94,7 @@ class Connector():
     def get_index_info(self) -> list[(str, str, list[str], int, int)]:
         info = []
         indexes = self.exec_commit(
-            "SELECT indexname, indexdef FROM pg_indexes WHERE indexname NOT LIKE 'pg_%';")
+            "SELECT indexname, indexdef FROM pg_indexes WHERE indexname NOT LIKE 'pg_%'AND NOT (indisunique OR indisprimary OR indisexclusion);")
         for index in indexes:
             index_name = index[0]
             indexdef = index[1]
