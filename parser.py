@@ -1,11 +1,10 @@
-# inspired by https://stackoverflow.com/questions/58669863/is-there-any-function-to-parse-a-complete-sql-query-in-python
+# noqa: E501 inspired by https://stackoverflow.com/questions/58669863/is-there-any-function-to-parse-a-complete-sql-query-in-python
 
 from enum import Enum
-from pprint import pprint
 from typing import TypedDict
 
-import sqlparse
 import pandas
+import sqlparse
 
 
 class QueryAttributes(TypedDict):
@@ -189,19 +188,13 @@ class WorkloadParser():
         df["query"] = df["query"].map(
             lambda x: x.removeprefix("statement: "))
         df["sanitized"] = df["query"]
-        # NOTE: This fixes the weird quote removal that csv readers in python do, replacing all
-        # individual single quotes with two single quotes and all individual double quotes with two
-        # double quotes.
-        df["sanitized"] = df["sanitized"].map(lambda x: x.replace("'", "''"))
-        df["sanitized"] = df["sanitized"].map(lambda x: x.replace('"', '""'))
-        # NOTE: We wish to keep the first single quote and last single quote intact to indicate
-        # the edges of values
+        # NOTE: The CSV parsers in python covert pairs of double quotes into a single double quote,
+        # but this does not currently cause issues. Should it become a problem, it may be better
+        # to sanitize this substring as well.
+        # NOTE: This gets rid of problematic backslashes for the parser (e.g. the substring "\''"
+        # which can end a string early. The first backslash is ignored by psycopg but not sqlparse.)
         df["sanitized"] = df["sanitized"].map(
-            lambda x: x.replace("''", "'", 1))
-        df["sanitized"] = df["sanitized"].map(
-            lambda x: x.replace("''", "'", -1))
-        # NOTE: This gets rid of problematic backslashes (e.g. in the substring \'')
-        df["sanitized"] = df["sanitized"].map(lambda x: x.replace("\\", ""))
+            lambda x: x.replace("\\'", "'"))
         queries = df[["query", "sanitized"]].values.tolist()
         res = []
         for val in queries:
@@ -254,10 +247,9 @@ if __name__ == "__main__":
     )
     print(res)
     res = qp.parse(
-        '''
-        UPDATE item SET title = ',lOuh%)7^Ob`\''dxFXbpV*sNN@Hlt#+z4%.h~""So%u_~q.)0WHHk,B YKsxa|@""A4X!(W@x&""x@TFnx=.<8v`h2Dbpo}XB84H{$2|+6''0xpsSasGG""""s2@^l]kw''kfaU' WHERE i_id=214
-        '''
+        '''UPDATE item SET title = ',lOuh%)7^Ob`\''dxFXbpV*sNN@Hlt#+z4%.h~"So%u_~q.)0WHHk,B YKsxa|@"A4X!(W@x&"x@TFnx=.<8v`h2Dbpo}XB84H{$2|+6''0xpsSasGG""s2@^l]kw''kfaU' WHERE i_id=214'''  # noqa: #501
     )
     print(res)
-    wp = WorkloadParser("./input/timeseries.csv", sample_schema_timeseries)
-    pprint(wp.parse_queries())
+    # NOTE: Change the schema here to match the workload file
+    wp = WorkloadParser("./input/starter.csv", sample_schema_epinions)
+    print(wp.parse_queries())

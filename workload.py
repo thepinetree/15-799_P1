@@ -1,4 +1,6 @@
 from collections import OrderedDict
+from pprint import pformat
+
 import connector
 import constants
 import itertools
@@ -6,7 +8,6 @@ import logging
 import parser
 import psutil
 import schema
-from pprint import pformat
 
 
 class Workload:

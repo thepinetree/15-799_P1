@@ -1,5 +1,5 @@
-import workload
 import logging
+import workload
 
 
 def run_alg(workload_csv, timeout):
@@ -54,4 +54,4 @@ def task_project1_setup():
 
 
 if __name__ == "__main__":
-    run_alg("./input/indexjungle.csv", 0)
+    run_alg("./input/starter.csv", 0)
