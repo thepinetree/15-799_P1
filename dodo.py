@@ -1,5 +1,5 @@
-import workload
 import logging
+import workload
 
 
 def run_alg(workload_csv, timeout):

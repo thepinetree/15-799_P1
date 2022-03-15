@@ -1,7 +1,7 @@
-# inspired by https://github.com/hyrise/index_selection_evaluation/blob/ca1dc87e20fe64f0ef962492597b77cd1916b828/selection/dbms/postgres_dbms.py
+# noqa: E501 inspired by https://github.com/hyrise/index_selection_evaluation/blob/ca1dc87e20fe64f0ef962492597b77cd1916b828/selection/dbms/postgres_dbms.py
+import constants
 import logging
 import psycopg
-import constants
 
 
 class Connector():
@@ -80,7 +80,12 @@ class Connector():
     def get_table_info(self) -> dict[str, list[str]]:
         info = dict()
         tables = self.exec_commit(
-            "SELECT relname FROM pg_class WHERE relkind='r' AND relname NOT LIKE 'pg_%' AND relname NOT LIKE 'sql_%';")
+            """
+            SELECT relname
+            FROM pg_class
+            WHERE relkind='r' AND relname NOT LIKE 'pg_%' AND relname NOT LIKE 'sql_%';
+            """
+        )
         for table in tables:
             table = table[0]
             cols = self.exec_commit(
@@ -94,13 +99,31 @@ class Connector():
     def get_index_info(self) -> list[(str, str, list[str], int, int)]:
         info = []
         indexes = self.exec_commit(
-            "SELECT indexname, indexdef FROM pg_indexes WHERE indexname NOT LIKE 'pg_%';")
+            """
+            SELECT subq.relname as indexname, indexdef
+            FROM pg_index
+                JOIN (SELECT oid, relname
+                        FROM pg_class
+                        WHERE relname IN (SELECT indexname
+                                          FROM   pg_indexes
+                                          WHERE  schemaname = 'public')) AS subq
+                ON indexrelid = subq.oid
+                JOIN pg_indexes
+                ON subq.relname = indexname
+            WHERE  NOT ( indisunique OR indisprimary OR indisexclusion );
+            """
+        )
         for index in indexes:
             index_name = index[0]
             indexdef = index[1]
             table, cols = self._parse_index_info(indexdef)
             stats = self.exec_commit(
-                f"SELECT idx_scan, pg_relation_size(indexrelname::text) FROM pg_stat_all_indexes WHERE indexrelname='{index_name}';")
+                f"""
+                SELECT idx_scan, pg_relation_size(indexrelname::text)
+                FROM pg_stat_all_indexes
+                WHERE indexrelname='{index_name}';
+                """
+            )
             num_scans, size = stats[0]
             info.append((index_name, table, cols, num_scans, size))
         return info
@@ -123,7 +146,11 @@ class Connector():
 if __name__ == "__main__":
     # NOTE: Assumes Epinions is loaded in the DB
     db = Connector()
-    q = "SELECT * FROM review r, item i WHERE i.i_id = r.i_id and r.i_id=112 ORDER BY rating DESC, r.creation_date DESC LIMIT 10;"
+    q = """
+    SELECT * FROM review r, item i
+    WHERE i.i_id = r.i_id and r.i_id=112
+    ORDER BY rating DESC, r.creation_date DESC LIMIT 10;
+    """
     res = db.exec_commit(q)
     print(f"Execution result: {res}")
     c0 = db.get_cost(q)

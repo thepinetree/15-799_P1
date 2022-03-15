@@ -1,5 +1,6 @@
-import parser
 from typing import Optional
+
+import parser
 
 query_id = 0
 
@@ -32,12 +33,15 @@ class Query:
     def get_str(self) -> str:
         return self.query
 
-    # TODO: Consider other structures for output with more information
     def get_indexable_cols(self) -> list[str]:
         cols = set()
         for col_ident in self.attrs["filters"]:
             cols.add(col_ident)
-        return list(cols)
+        for col_ident in self.attrs["groups"]:
+            cols.add(col_ident)
+        for col_ident in self.attrs["orders"]:
+            cols.add(col_ident)
+        return cols
 
 
 class Column:
@@ -49,7 +53,7 @@ class Column:
         # Queries with column appearing as indexable predicate
         self.queries = set()
 
-    def to_str(self):
+    def to_str(self) -> str:
         return self.table + '.' + self.name
 
     def get_name(self) -> str:
@@ -69,6 +73,7 @@ class Table:
     def __init__(self, name: str, cols: tuple[str]):
         self.name = name
         self.cols = dict()
+        self.referenced_cols = set()
         for col in cols:
             self.cols[col] = Column(self.name, col)
 
@@ -77,6 +82,12 @@ class Table:
 
     def get_cols(self) -> dict[str, Column]:
         return self.cols
+
+    def add_referenced_col(self, col: Column):
+        self.referenced_cols.add(col)
+
+    def get_referenced_cols(self) -> set[Column]:
+        return self.referenced_cols
 
 
 class Index:
@@ -111,7 +122,8 @@ class Index:
         assert(len(cols) > 0)
         assert(False not in [col.get_table() ==
                cols[0].get_table() for col in cols])
-        # Unique identifier. These identifiers are the internal, canonical representation of indexes.
+        # Unique identifier. These identifiers are the internal, canonical representation
+        # of indexes.
         self.identifier = self.Identifier(cols[0].get_table(), cols)
         self.name = None
         self.oid = None
@@ -155,7 +167,7 @@ class Index:
         name = self.name
         if name is None:
             name = self.identifier.identifier_name()
-        return f"CREATE INDEX tune_{name} ON {self.identifier.table_str()} ({self.identifier.cols_str()})"
+        return f"CREATE INDEX tune_{name} ON {self.identifier.table_str()} ({self.identifier.cols_str()})"  # noqa: E501
 
     # Only non-hypothetical indexes can be dropped, which must always use `set_name`
     def drop_stmt(self) -> str:
