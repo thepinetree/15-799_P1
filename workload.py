@@ -121,9 +121,6 @@ class Workload:
                     for attr in self.tables[self.next_ind.get_table()].get_referenced_cols():
                         chosen_cols_list = list(chosen_cols)
                         if attr not in chosen_cols_list:
-                            print("ind cols: {0}".format(
-                                [col.to_str() for col in chosen_cols_list]))
-                            print(attr.to_str())
                             chosen_cols_list.append(attr)
                             new_ind = tuple(chosen_cols_list)
                             self.potential_inds.add(new_ind)
