@@ -60,7 +60,7 @@ class Connector():
     def drop_simulated_index(self, oid: int):
         hypopg_stmt = f"SELECT * FROM hypopg_drop_index({oid});"
         result = self.exec_commit(hypopg_stmt)
-        assert(result[0][0] == True)
+        assert(result[0][0] is True)
 
     def size_simulated_index(self, oid: int) -> int:
         hypopg_stmt = f"SELECT hypopg_relation_size({oid}) FROM hypopg_list_indexes;"
