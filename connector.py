@@ -13,8 +13,7 @@ class Connector():
         self._connection.autocommit = constants.AUTOCOMMIT
         logging.debug(
             f"Connected to {constants.DB_NAME} as {constants.DB_USER}")
-        _ = self.exec_commit_no_result(
-            "CREATE EXTENSION IF NOT EXISTS hypopg;")
+        self.exec_commit_no_result("CREATE EXTENSION IF NOT EXISTS hypopg;")
         logging.debug("Enabled HypoPG")
         self.refresh_stats()
 
@@ -52,6 +51,7 @@ class Connector():
         logging.debug(
             f"Disconnected from {constants.DB_NAME} as {constants.DB_USER}")
 
+    # BEGIN: HypoPG operations on simulated indexes
     def simulate_index(self, create_stmt: str) -> int:
         hypopg_stmt = f"SELECT * FROM hypopg_create_index('{create_stmt}');"
         result = self.exec_commit(hypopg_stmt)
@@ -66,6 +66,17 @@ class Connector():
         hypopg_stmt = f"SELECT hypopg_relation_size({oid}) FROM hypopg_list_indexes;"
         result = self.exec_commit(hypopg_stmt)
         return result[0][0]
+    # END
+
+    # BEGIN: Postgres operations to simulate index changes
+    def simulate_index_drop(self, ind_name: str):
+        stmt = f"UPDATE pg_index SET indisvalid = false WHERE indexrelid = '{ind_name}'::regclass;"
+        self.exec_commit_no_result(stmt)
+
+    def undo_simulated_index_drop(self, ind_name: str):
+        stmt = f"UPDATE pg_index SET indisvalid = true WHERE indexrelid = '{ind_name}'::regclass;"
+        self.exec_commit_no_result(stmt)
+    # END
 
     def get_cost(self, query: str) -> float:
         stmt = f"EXPLAIN (format json) {query};"

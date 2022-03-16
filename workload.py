@@ -55,7 +55,9 @@ class Workload:
             index.set_size(size)
             index.set_name(name)
             ind_dict[index.get_identifier()] = index
-        # Sort indexes by lowest usage factor (scans / size)
+        # Sort indexes by lowest usage factor (scans / size) as a proxy of their usefulness.
+        # Later, if an index is actually considered to be dropped, we use a better cost metric
+        # to determine if the new index is better than the worst index in this set.
         self.indexes = OrderedDict(
             sorted(ind_dict.items(), key=lambda x: x[1].get_num_uses()/x[1].get_size()))
         # Parse workload queries
@@ -93,9 +95,6 @@ class Workload:
                 if ind.get_identifier() not in self.indexes:
                     self._evaluate_index(ind)
             if self.next_ind is not None:  # Index to improve workload found
-                # Set up simulated index info
-                ind_oid = self.db.simulate_index(self.next_ind.create_stmt())
-                self.next_ind.set_oid(ind_oid)
                 if self.next_ind.get_size() > self.max_storage:  # Over capacity, attempt rebalance
                     can_rebalance = self._rebalance_indexes(self.next_ind)
                     if can_rebalance:
@@ -182,34 +181,27 @@ class Workload:
                 f"Cost savings: {delta}. New workload cost estimate: {self.cost + delta}."
             )
         # Drop considered index before next iteration
-        self.db.drop_simulated_index(ind_oid)
+        self.db.drop_simulated_index(ind.get_oid())
 
     # If new index increases memory pressure beyond RAM capacity, consider dropping existing indexes
     # by least benefit (scans / size)
     def _rebalance_indexes(self, ind: schema.Index) -> bool:
         drop_inds = []
         ind_size = ind.get_size()
-        num_uses = ind.get_num_uses()
-        ind_oid = ind.get_oid()
         it = iter(self.indexes)
-        while ind_size > self.max_storage:  # Continue while we need to free up more storage
+        max_storage = self.max_storage
+        while ind_size > max_storage:  # Continue while we need to free up more storage
             try:
                 # Consider the next existing index
                 worst_index = next(it)
-                w_num_uses = self.indexes[worst_index].get_num_uses()
-                w_size = self.indexes[worst_index].get_size()
-                # In the absence of cost information of existing indexes, we can choose to drop
-                # indexes by a proxy of uses/size with the assumption that all uses are similar
-                # in cost
-                # TODO: try to determine a better metric of index cost than num_uses
-                if num_uses/ind_size > w_num_uses/w_size:
+                if self._is_better_index(ind, self.indexes[worst_index]):
                     drop_inds.append(worst_index)
-                    self.max_storage += w_size
+                    w_size = self.indexes[worst_index].get_size()
+                    max_storage += w_size
                     continue
-                # The chosen index was not better than the existing index, give up
+                # The chosen index was not better than the existing index, try again
             except StopIteration:
                 # There are no more indexes to consider dropping, give up
-                self.db.drop_simulated_index(ind_oid)
                 return False
         # Write commands to drop all chosen indexes and remove from internal set of existing indexes
         # before adding new index
@@ -217,7 +209,7 @@ class Workload:
             drop_ind = self.indexes[drop_ind_ident]
             self.out.write(drop_ind.drop_stmt() + ";\n")
             self.out.flush()
-            self.max_storage -= drop_ind.get_size()
+            self.max_storage += drop_ind.get_size()
             del self.indexes[drop_ind_ident]
             logging.debug(
                 f"Applying '{drop_ind.drop_stmt()}'."
@@ -226,16 +218,38 @@ class Workload:
 
     # Update workload cost and storage capacity based on single newly added index
     def _update_costs(self, ind: schema.Index):
-        evaluated = set()
+        delta = self._get_index_delta(ind, True)
+        self.cost += delta
+        ind_size = ind.get_size()
+        self.max_storage -= ind_size
+
+    # Determine if index ind has better cost improvement than target improvement
+    def _is_better_index(self, new_ind: schema.Index, old_ind: schema.Index) -> bool:
+        # Temporarily simulate index drop
+        self.db.simulate_index_drop(old_ind.get_name())
+        delta = self._get_index_delta(new_ind, False)
+        # Undo simulated index drop
+        self.db.undo_simulated_index_drop(old_ind.get_name())
+        # NOTE: a lower delta indicates a better cost
+        if delta < 0:
+            return True
+        return False
+
+    def _get_index_delta(self, ind: schema.Index, update_cost: bool) -> float:
+        ind_oid = self.db.simulate_index(ind.create_stmt())
+        ind.set_oid(ind_oid)
+        # Evaluate cost improvement of new index
         delta = 0
+        evaluated = set()
         for col in ind.get_cols():
             for qid in col.get_queries():
                 if qid not in evaluated:  # Evaluate each applicable query exactly once
                     old_cost = self.queries[qid].get_cost()
                     new_cost = self.db.get_cost(self.queries[qid].get_str())
                     delta += (new_cost - old_cost)
-                    self.queries[qid].set_cost(new_cost)
                     evaluated.add(qid)
-        self.cost += delta
-        ind_size = self.db.size_simulated_index(ind.get_oid())
-        self.max_storage -= ind_size
+                    if update_cost:
+                        self.queries[qid].set_cost(new_cost)
+        # Drop the simulated index
+        self.db.drop_simulated_index(ind.get_oid())
+        return delta
