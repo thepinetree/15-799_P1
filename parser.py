@@ -258,4 +258,4 @@ if __name__ == "__main__":
     print(res)
     # NOTE: Change the schema here to match the workload file
     wp = WorkloadParser("./input/starter.csv", sample_schema_epinions)
-    print(wp.parse_queries())
+    pprint(wp.parse_queries())
