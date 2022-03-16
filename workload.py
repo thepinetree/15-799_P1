@@ -3,7 +3,6 @@ from pprint import pformat
 
 import connector
 import constants
-import itertools
 import logging
 import parser
 import psutil
@@ -72,12 +71,8 @@ class Workload:
                 col = self.tables[table].get_cols()[col]
                 self.tables[table].add_referenced_col(col)
                 col.add_query(qid)
+                self.potential_inds.add(tuple([col]))
                 _dbg_col_refs.add(col)
-            for _, table in self.tables.items():
-                referenced_cols = table.get_referenced_cols()
-                for num_cols in range(1, constants.MAX_INDEX_WIDTH + 1):
-                    for subset in itertools.combinations(referenced_cols, num_cols):
-                        self.potential_inds.add(tuple(subset))
         # Setup initial cost
         self.cost = self._workload_cost()
         logging.debug("Col -> query counts: {0}".format(pformat(
@@ -120,9 +115,23 @@ class Workload:
                 logging.debug(
                     f"Applying '{self.next_ind}'. New workload cost estimate: {self.cost}."
                 )
-                self.potential_inds.remove(self.next_ind.get_cols())
+                chosen_cols = self.next_ind.get_cols()
+                self.potential_inds.remove(chosen_cols)
+                if len(chosen_cols) < constants.MAX_INDEX_WIDTH:
+                    for attr in self.tables[self.next_ind.get_table()].get_referenced_cols():
+                        chosen_cols_list = list(chosen_cols)
+                        if attr not in chosen_cols_list:
+                            print("ind cols: {0}".format(
+                                [col.to_str() for col in chosen_cols_list]))
+                            print(attr.to_str())
+                            chosen_cols_list.append(attr)
+                            new_ind = tuple(chosen_cols_list)
+                            self.potential_inds.add(new_ind)
+                            logging.debug("Adding potential index: {0}".format(
+                                [col.to_str() for col in new_ind]))
                 self.next_ind = None
                 self.improvement = 0
+
             else:  # Stop when there is no benefit to the workload
                 logging.debug(
                     "Terminating selection procedure. No remaining cost improvement. " +

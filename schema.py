@@ -133,6 +133,9 @@ class Index:
     def __str__(self) -> str:
         return self.create_stmt()
 
+    def get_table(self) -> str:
+        return self.identifier.get_table()
+
     def get_cols(self) -> tuple[Column, ...]:
         return self.identifier.get_cols()
 

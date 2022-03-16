@@ -1,6 +1,7 @@
 # noqa: E501 inspired by https://stackoverflow.com/questions/58669863/is-there-any-function-to-parse-a-complete-sql-query-in-python
 
 from enum import Enum
+from pprint import pprint
 from typing import TypedDict
 
 import pandas
@@ -170,6 +171,11 @@ class WorkloadParser():
             return True
         if len(must_include.intersection(q_tokens)) == 0:
             return True
+        excluded_substrings = ["pg_", "version()"]
+        for token in q_tokens:
+            for substr in excluded_substrings:
+                if substr in token:
+                    return True
         return False
 
     # TODO: Use a more limited preprocessing technique
