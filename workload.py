@@ -93,6 +93,9 @@ class Workload:
                 if ind.get_identifier() not in self.indexes:
                     self._evaluate_index(ind)
             if self.next_ind is not None:  # Index to improve workload found
+                # Set up simulated index info
+                ind_oid = self.db.simulate_index(self.next_ind.create_stmt())
+                self.next_ind.set_oid(ind_oid)
                 if self.next_ind.get_size() > self.max_storage:  # Over capacity, attempt rebalance
                     can_rebalance = self._rebalance_indexes(self.next_ind)
                     if can_rebalance:
@@ -172,16 +175,14 @@ class Workload:
         if improvement < self.improvement and abs(delta) >= abs(self.min_cost_factor * self.cost):
             # Current index has best improvement and is over minimum cost improvement factor
             assert(delta < 0 and -delta < self.cost)
-            if self.next_ind is not None:
-                self.db.drop_simulated_index(self.next_ind.get_oid())
             self.next_ind = ind
             self.improvement = improvement
             logging.debug(
                 f"Index {ind} shows improvement factor {self.improvement}. " +
                 f"Cost savings: {delta}. New workload cost estimate: {self.cost + delta}."
             )
-        else:
-            self.db.drop_simulated_index(ind_oid)
+        # Drop considered index before next iteration
+        self.db.drop_simulated_index(ind_oid)
 
     # If new index increases memory pressure beyond RAM capacity, consider dropping existing indexes
     # by least benefit (scans / size)
@@ -192,7 +193,7 @@ class Workload:
         ind_oid = ind.get_oid()
         it = iter(self.indexes)
         while ind_size > self.max_storage:  # Continue while we need to free up more storage
-            if len(self.indexes) != 0:
+            try:
                 # Consider the next existing index
                 worst_index = next(it)
                 w_num_uses = self.indexes[worst_index].get_num_uses()
@@ -203,20 +204,24 @@ class Workload:
                 # TODO: try to determine a better metric of index cost than num_uses
                 if num_uses/ind_size > w_num_uses/w_size:
                     drop_inds.append(worst_index)
-                    self.max_storage -= w_size
+                    self.max_storage += w_size
                     continue
                 # The chosen index was not better than the existing index, give up
-            # There are no more indexes to consider dropping, give up
-            self.db.drop_simulated_index(ind_oid)
-            return False
+            except StopIteration:
+                # There are no more indexes to consider dropping, give up
+                self.db.drop_simulated_index(ind_oid)
+                return False
         # Write commands to drop all chosen indexes and remove from internal set of existing indexes
         # before adding new index
         for drop_ind_ident in drop_inds:
             drop_ind = self.indexes[drop_ind_ident]
-            self.out.write(self.drop_ind.drop_stmt() + ";\n")
+            self.out.write(drop_ind.drop_stmt() + ";\n")
             self.out.flush()
             self.max_storage -= drop_ind.get_size()
             del self.indexes[drop_ind_ident]
+            logging.debug(
+                f"Applying '{drop_ind.drop_stmt()}'."
+            )
         return True
 
     # Update workload cost and storage capacity based on single newly added index
